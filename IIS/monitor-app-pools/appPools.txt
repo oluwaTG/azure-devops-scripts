@@ -1,0 +1,4 @@
+# List of IIS App Pools to monitor
+MyAppPool1
+MyAppPool2
+MyAppPool3
