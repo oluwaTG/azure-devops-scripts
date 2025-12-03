@@ -1,0 +1,191 @@
+# ================================
+#   Folder Sync + PR Template
+# ================================
+# This pipeline:
+# 1. Clones target repos
+# 2. Creates a new branch
+# 3. Syncs selected folders from source repo to each target repo
+# 4. Creates a PR (with auto-complete enabled)
+#
+# All paths, repo names, org names, etc. are passed as parameters.
+
+trigger: none
+
+parameters:
+  - name: foldersToSync
+    type: object
+    displayName: "Folders to sync (relative paths)"
+    default: []
+
+  - name: targetRepos
+    type: object
+    displayName: "Target repositories to sync to"
+    default: []
+
+  - name: sourceFolderBase
+    type: string
+    displayName: "Base folder in the source repo that contains the folders to sync"
+    default: "path/to/source/root"
+
+  - name: orgName
+    type: string
+    displayName: "Azure DevOps Organization"
+    default: "YOUR_ORG_NAME"
+
+  - name: projectName
+    type: string
+    displayName: "Azure DevOps Project"
+    default: "YOUR_PROJECT_NAME"
+
+  - name: targetBranch
+    type: string
+    displayName: "Target branch for PR"
+    default: "main"
+
+  - name: gitUserName
+    type: string
+    displayName: "Commit user.name"
+    default: "Automation Bot"
+
+  - name: gitUserEmail
+    type: string
+    displayName: "Commit user.email"
+    default: "automation@domain.com"
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+
+jobs:
+- ${{ each repo in parameters.targetRepos }}:
+  - job: Sync_${{ replace(repo, '.', '_') }}
+    displayName: "Sync folders to ${{ repo }}"
+    steps:
+
+    # -----------------------------------------------
+    # Checkout Source Repo
+    # -----------------------------------------------
+    - checkout: self
+      persistCredentials: true
+
+    # -----------------------------------------------
+    # Clone Target Repo + Create Branch
+    # -----------------------------------------------
+    - bash: |
+        set -e
+        DATE_SUFFIX=$(date +%Y%m%d_%H%M)
+        PROJECT_ENCODED=$(echo "${{ parameters.projectName }}" | sed 's/ /%20/g')
+        TARGET_DIR="target_${REPO_NAME}"
+
+        git clone \
+          "https://AzureDevOps:$SYSTEM_ACCESSTOKEN@dev.azure.com/${{ parameters.orgName }}/$PROJECT_ENCODED/_git/$REPO_NAME" \
+          "$TARGET_DIR"
+
+        cd "$TARGET_DIR"
+        git checkout -b "feature/folder_sync_$DATE_SUFFIX"
+        cd ..
+      env:
+        SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+        REPO_NAME: ${{ repo }}
+      displayName: "Clone repo + create sync branch"
+
+    # -----------------------------------------------
+    # Copy folders from source → target repo
+    # -----------------------------------------------
+    - bash: |
+        set -e
+
+        TARGET_DIR="target_${REPO_NAME}"
+        SRC_BASE="${{ parameters.sourceFolderBase }}"
+        DATE_SUFFIX=$(date +%Y%m%d_%H%M)
+
+        IFS=' ' read -r -a FOLDERS_ARR <<< "$FOLDERS"
+
+        for folder in "${FOLDERS_ARR[@]}"; do
+          SRC="$SRC_BASE/$folder"
+          DEST="$TARGET_DIR/$SRC_BASE/$folder"
+
+          if [ ! -d "$SRC" ]; then
+            echo "WARNING: Source folder '$SRC' does not exist. Skipping."
+            continue
+          fi
+
+          mkdir -p "$DEST"
+          rsync -av --delete "$SRC/" "$DEST/"
+        done
+
+        cd "$TARGET_DIR"
+
+        git config user.name "${{ parameters.gitUserName }}"
+        git config user.email "${{ parameters.gitUserEmail }}"
+        git add .
+
+        if git diff-index --quiet HEAD; then
+          echo "No changes detected."
+          echo "NO_CHANGES" > ../change.flag
+        else
+          git commit -m "Automated folder sync update"
+          git push --set-upstream origin "feature/folder_sync_$DATE_SUFFIX"
+          echo "CHANGES" > ../change.flag
+        fi
+      env:
+        REPO_NAME: ${{ repo }}
+        FOLDERS: ${{ parameters.foldersToSync }}
+      displayName: "Sync folders + push changes"
+
+    # -----------------------------------------------
+    # Create Pull Request
+    # -----------------------------------------------
+    - bash: |
+        if [[ "$(cat change.flag)" == "NO_CHANGES" ]]; then
+          echo "No changes → skipping PR creation."
+          exit 0
+        fi
+
+        set -e
+        DATE_SUFFIX=$(date +%Y%m%d_%H%M)
+        PROJECT_ENCODED=$(echo "${{ parameters.projectName }}" | sed 's/ /%20/g')
+        BRANCH="feature/folder_sync_$DATE_SUFFIX"
+
+        REPO_URL="https://dev.azure.com/${{ parameters.orgName }}/$PROJECT_ENCODED/_apis/git/repositories/${REPO_NAME}"
+
+        echo "Creating PR..."
+
+        PR_TITLE="Sync folders to ${{ parameters.targetBranch }} ($BRANCH)"
+
+        PR_JSON=$(jq -n \
+          --arg sourceRef "refs/heads/$BRANCH" \
+          --arg targetRef "refs/heads/${{ parameters.targetBranch }}" \
+          --arg title "$PR_TITLE" \
+          '{sourceRefName: $sourceRef, targetRefName: $targetRef, title: $title}')
+
+        PR_RESPONSE=$(curl -s -u :$SYSTEM_ACCESSTOKEN \
+          -H "Content-Type: application/json" \
+          -d "$PR_JSON" \
+          -X POST "$REPO_URL/pullrequests?api-version=7.1-preview")
+
+        PR_ID=$(echo "$PR_RESPONSE" | jq -r '.pullRequestId')
+
+        if [[ "$PR_ID" == "null" || -z "$PR_ID" ]]; then
+          echo "FAILED: Unable to create PR."
+          echo "$PR_RESPONSE"
+          exit 1
+        fi
+
+        echo "PR created → ID $PR_ID"
+
+        echo "Enabling auto-complete..."
+
+        AUTO_COMPLETE_JSON=$(jq -n \
+          '{completionOptions:{deleteSourceBranch:true, mergeStrategy:"squash"}}')
+
+        curl -s -u :$SYSTEM_ACCESSTOKEN \
+          -H "Content-Type: application/json" \
+          -d "$AUTO_COMPLETE_JSON" \
+          -X PATCH "$REPO_URL/pullrequests/'"$PR_ID"'?api-version=7.1-preview"
+
+        echo "Auto-complete enabled."
+      env:
+        SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+        REPO_NAME: ${{ repo }}
+      displayName: "Create PR for ${{ repo }}"

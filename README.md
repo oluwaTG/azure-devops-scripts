@@ -11,10 +11,9 @@ I created this repository to share practical solutions, learnings, and reusable 
 
 Each folder contains a specific project or script:
 
-- **iis-app-pool-monitor/** – PowerShell script to monitor IIS App Pools and automatically restart any that stop unexpectedly.
+- **IIS/** – PowerShell scripts for IIS.
 - **repo-migration/** – Scripts for migrating repositories between Azure DevOps organizations.
 - **work-item-linking/** – Scripts to link TFS changesets to Git commits in Azure DevOps.
-- **storage-account-security/** – Scripts to harden Azure storage accounts, e.g., disabling public access.
 - **aks-utils/** – Scripts and tools to monitor and manage AKS clusters, nodes, and resources.
 - **pipelines/** – Example Azure DevOps YAML pipelines.
 - **terraform-modules/** – Reusable Terraform modules for provisioning cloud resources.
