@@ -6,19 +6,19 @@ It is designed for environments where shared folders, policy fragments, or reusa
 
 ### 🚀 Features
 
-Syncs selected subfolders from a source repo to multiple target repos
+- Syncs selected subfolders from a source repo to multiple target repos
 
-Automatically creates a feature branch in each target repo
+- Automatically creates a feature branch in each target repo
 
-Commits only when there are actual changes
+- Commits only when there are actual changes
 
-Pushes updates and opens a Pull Request
+- Pushes updates and opens a Pull Request
 
-Enables auto-complete with squash merge and branch deletion
+- Enables auto-complete with squash merge and branch deletion
 
-Supports multiple folder selections and multiple target repos
+- Supports multiple folder selections and multiple target repos
 
-Fully parameterized
+- Fully parameterized
 
 ### 📁 Folder Structure
 
@@ -26,8 +26,8 @@ This pipeline is stored under:
 
 /pipelines/sync-repos/sync-repos.yml
 
-🧩 Parameters
-### foldersToSync (object)
+### 🧩 Parameters
+## foldersToSync (object)
 
 A list of folder names that should be synchronized from the source repository.
 
