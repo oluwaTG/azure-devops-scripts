@@ -1,0 +1,12 @@
+# Local .terraform directories
+**/.terraform/*
+
+# .tfstate files
+*.tfstate
+*.tfstate.*.backup
+*.tfstate.backup
+*.lock.hcl
+
+*.secret
+.DS_Store
+*.drawio.bkp
