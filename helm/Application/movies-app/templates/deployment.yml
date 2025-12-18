@@ -20,6 +20,18 @@ spec:
         prometheus.io/port: "{{ .Values.prometheus.scrapePort }}"
       {{- end }}
     spec:
+
+      {{- if .Values.dbSeed.enabled }}
+      initContainers:
+        - name: db-seed
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python", "app/seed.py"]
+          env:
+            - name: DATABASE_URL
+              value: {{ .Values.env.DATABASE_URL | quote }}
+      {{- end }}
+
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
