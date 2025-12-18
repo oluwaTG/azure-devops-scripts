@@ -1,3 +1,4 @@
+{{- if not .Values.rollout.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -43,3 +44,4 @@ spec:
                 name: movies-db-secret
           resources:
 {{ toYaml .Values.resources | indent 12 }}
+{{- end }}
