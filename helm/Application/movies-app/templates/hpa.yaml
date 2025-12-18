@@ -5,8 +5,13 @@ metadata:
   name: {{ .Release.Name }}
 spec:
   scaleTargetRef:
-    apiVersion: {{- if .Values.rollout.enabled }}argoproj.io/v1alpha1{{- else }}apps/v1{{- end }}
-    kind: {{- if .Values.rollout.enabled }}Rollout{{- else }}Deployment{{- end }}
+{{- if .Values.rollout.enabled }}
+    apiVersion: argoproj.io/v1alpha1
+    kind: Rollout
+{{- else }}
+    apiVersion: apps/v1
+    kind: Deployment
+{{- end }}
     name: {{ .Release.Name }}
   minReplicas: {{ .Values.hpa.minReplicas }}
   maxReplicas: {{ .Values.hpa.maxReplicas }}
