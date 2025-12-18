@@ -1,0 +1,9 @@
+postgresql:
+  auth:
+    username: dev-movies
+    password: movies
+    database: movies
+
+  primary:
+    persistence:
+      enabled: false

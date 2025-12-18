@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: movies-dev
+  name: movies-staging
   namespace: argocd
 spec:
   project: default
@@ -9,15 +9,15 @@ spec:
   source:
     repoURL: https://github.com/oluwaTG/azure-devops-scripts.git
     targetRevision: main
-    path: helm/movies-app
+    path: helm/Application/movies-app
     helm:
       valueFiles:
         - values.yaml
-        - env/values-dev.yaml
+        - env/values-staging.yaml
 
   destination:
     server: https://kubernetes.default.svc
-    namespace: dev
+    namespace: staging
 
   syncPolicy:
     automated:
