@@ -1,8 +1,8 @@
 replicaCount: 1
 
 image:
-  repository: ghcr.io/your-org/movies-app
-  tag: latest
+  repository: movies-app
+  tag: local
   pullPolicy: IfNotPresent
 
 service:
