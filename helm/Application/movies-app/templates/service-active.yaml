@@ -1,0 +1,12 @@
+{{- if .Values.rollout.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-active
+spec:
+  selector:
+    app: {{ .Release.Name }}
+  ports:
+    - port: 80
+      targetPort: {{ .Values.service.targetPort }}
+{{- end }}
