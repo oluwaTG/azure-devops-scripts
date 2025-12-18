@@ -28,6 +28,6 @@ spec:
             - containerPort: {{ .Values.service.targetPort }}
           env:
             - name: DATABASE_URL
-              value: "{{ .Values.env.DATABASE_URL }}"
+              value: {{ .Values.env.DATABASE_URL | quote }}
           resources:
 {{ toYaml .Values.resources | indent 12 }}
