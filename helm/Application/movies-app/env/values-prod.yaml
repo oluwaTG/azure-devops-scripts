@@ -3,3 +3,6 @@ env:
 
 dbSeed:
   enabled: true
+
+image:
+  tag: latest

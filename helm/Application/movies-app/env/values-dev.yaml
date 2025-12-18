@@ -2,3 +2,6 @@ db_connection: ""
 
 dbSeed:
   enabled: true
+
+image:
+  tag: latest
