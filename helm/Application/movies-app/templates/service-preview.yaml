@@ -4,8 +4,8 @@ kind: Service
 metadata:
   name: {{ .Release.Name }}-preview
 spec:
-  selector:
-    app: {{ .Release.Name }}
+  # selector:
+  #   app: {{ .Release.Name }}
   ports:
     - port: 80
       targetPort: {{ .Values.service.targetPort }}
