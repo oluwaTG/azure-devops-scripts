@@ -27,9 +27,9 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: ["python", "app/seed.py"]
-          env:
-            - name: DATABASE_URL
-              value: {{ .Values.env.DATABASE_URL | quote }}
+          envFrom:
+            - secretRef:
+                name: movies-db-secret
       {{- end }}
 
       containers:
