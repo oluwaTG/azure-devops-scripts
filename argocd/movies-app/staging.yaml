@@ -7,7 +7,7 @@ spec:
   project: default
 
   source:
-    repoURL: https://github.com/YOUR_GITHUB_USERNAME/oluwaTG-devops
+    repoURL: https://github.com/oluwaTG/azure-devops-scripts.git
     targetRevision: main
     path: helm/movies-app
     helm:

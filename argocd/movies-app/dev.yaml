@@ -7,7 +7,7 @@ spec:
   project: default
 
   source:
-    repoURL: https://github.com/zigzag-returns/oluwaTG-devops.git
+    repoURL: https://github.com/oluwaTG/azure-devops-scripts.git
     targetRevision: main
     path: helm/movies-app
     helm:
