@@ -1,0 +1,25 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: movies-dev
+  namespace: argocd
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/zigzag-returns/oluwaTG-devops.git
+    targetRevision: main
+    path: helm/movies-app
+    helm:
+      valueFiles:
+        - values.yaml
+        - env/values-dev.yaml
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: dev
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

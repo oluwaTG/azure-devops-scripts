@@ -1,0 +1,2 @@
+env:
+  DATABASE_URL: postgresql://postgres:postgres@movies-db.prod.svc.cluster.local:5432/movies
