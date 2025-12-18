@@ -4,4 +4,4 @@ dbSeed:
   enabled: true
 
 image:
-  tag: latest
+  tag: "dda0886"
