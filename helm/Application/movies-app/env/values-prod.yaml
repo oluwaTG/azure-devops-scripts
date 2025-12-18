@@ -8,3 +8,6 @@ image:
 
 rollout:
   enabled: true
+
+hpa:
+  enabled: true
