@@ -1,14 +1,14 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: devops-apps
+  name: devops-db
   namespace: argocd
 spec:
   project: default
   source:
     repoURL: https://github.com/oluwaTG/azure-devops-scripts.git
     targetRevision: main
-    path: argocd/Application
+    path: argocd/Database
     directory:
       recurse: true
   destination:
