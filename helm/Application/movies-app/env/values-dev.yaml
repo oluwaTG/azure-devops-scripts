@@ -4,7 +4,7 @@ dbSeed:
   enabled: true
 
 image:
-  tag: "0674fb6"
+  tag: "5ad9d9c"
 
 rollout:
   enabled: false
