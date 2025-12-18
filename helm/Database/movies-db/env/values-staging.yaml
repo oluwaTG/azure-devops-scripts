@@ -1,0 +1,13 @@
+postgresql:
+  image:
+    registry: docker.io
+    repository: bitnami/postgresql
+    tag: latest
+  auth:
+    username: staging-movies
+    password: movies
+    database: movies
+
+  primary:
+    persistence:
+      enabled: false
