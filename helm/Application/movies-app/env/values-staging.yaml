@@ -5,3 +5,6 @@ dbSeed:
 
 image:
   tag: "dda0886"
+
+rollout:
+  enabled: false

@@ -5,3 +5,6 @@ dbSeed:
 
 image:
   tag: "a717acc"
+
+rollout:
+  enabled: true

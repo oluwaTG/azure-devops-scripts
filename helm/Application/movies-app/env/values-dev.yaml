@@ -5,3 +5,6 @@ dbSeed:
 
 image:
   tag: "0674fb6"
+
+rollout:
+  enabled: false
