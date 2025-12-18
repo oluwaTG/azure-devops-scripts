@@ -7,7 +7,7 @@ spec:
   replicas: {{ .Values.replicaCount }}
   strategy:
     blueGreen:
-      activeService: {{ .Release.Name }}-active
+      activeService: {{ .Release.Name }}
       previewService: {{ .Release.Name }}-preview
       autoPromotionEnabled: false
   selector:
