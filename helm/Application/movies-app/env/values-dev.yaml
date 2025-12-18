@@ -4,4 +4,4 @@ dbSeed:
   enabled: true
 
 image:
-  tag: "6a94f8a"
+  tag: "0674fb6"
