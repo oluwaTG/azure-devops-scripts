@@ -38,8 +38,8 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - containerPort: {{ .Values.service.targetPort }}
-          env:
-            - name: DATABASE_URL
-              value: {{ .Values.env.DATABASE_URL | quote }}
+          envFrom:
+            - secretRef:
+                name: movies-db-secret
           resources:
 {{ toYaml .Values.resources | indent 12 }}
