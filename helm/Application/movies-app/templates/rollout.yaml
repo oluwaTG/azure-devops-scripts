@@ -26,4 +26,6 @@ spec:
           envFrom:
             - secretRef:
                 name: movies-db-secret
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
 {{- end }}

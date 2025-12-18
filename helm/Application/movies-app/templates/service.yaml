@@ -6,8 +6,6 @@ metadata:
 {{ toYaml .Values.labels | indent 4 }}
 spec:
   type: {{ .Values.service.type }}
-  # selector:
-  #   app: {{ .Release.Name }}
   ports:
     - protocol: TCP
       port: {{ .Values.service.port }}
