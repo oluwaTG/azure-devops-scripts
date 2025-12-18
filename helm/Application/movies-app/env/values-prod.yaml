@@ -1,4 +1,4 @@
-db_connection: "postgresql://prod-movies:movies@movies-db-dev-postgresql.dev.svc.cluster.local:5432/movies"
+db_connection: "postgresql://prod-movies:movies@movies-db-prod-postgresql.prod.svc.cluster.local:5432/movies"
 
 dbSeed:
   enabled: true
