@@ -5,4 +5,4 @@ dbSeed:
   enabled: true
 
 image:
-  tag: "c43b393"
+  tag: "3157e91"
