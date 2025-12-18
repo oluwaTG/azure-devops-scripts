@@ -1,8 +1,0 @@
-env:
-  DATABASE_URL: postgresql://postgres:postgres@movies-db.staging.svc.cluster.local:5432/movies
-
-dbSeed:
-  enabled: true
-
-image:
-  tag: latest
