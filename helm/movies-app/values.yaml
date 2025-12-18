@@ -1,0 +1,24 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/your-org/movies-app
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8000
+  targetPort: 8000
+
+prometheus:
+  enabled: true
+  scrapePath: /metrics
+  scrapePort: "8000"
+
+env:
+  DATABASE_URL: ""
+
+resources: {}
+
+labels:
+  app: movies-app
