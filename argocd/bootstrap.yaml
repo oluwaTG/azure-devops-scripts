@@ -7,7 +7,7 @@ spec:
   source:
     repoURL: https://github.com/oluwaTG/azure-devops-scripts.git
     targetRevision: main
-    path: .
+    path: argocd
     directory:
       recurse: true
   destination:
