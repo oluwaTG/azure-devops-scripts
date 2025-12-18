@@ -1,8 +1,8 @@
 replicaCount: 1
 
 image:
-  repository: docker.io/elumole22/movies
-  tag: latest
+  repository: docker.io/elumole22/movies-app
+  tag: 0b4481d
   pullPolicy: IfNotPresent
 
 service:
