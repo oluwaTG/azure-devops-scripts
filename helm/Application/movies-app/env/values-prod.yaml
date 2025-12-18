@@ -5,4 +5,4 @@ dbSeed:
   enabled: true
 
 image:
-  tag: latest
+  tag: "9896903"
