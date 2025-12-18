@@ -4,6 +4,7 @@ metadata:
   name: devops-apps
   namespace: argocd
 spec:
+  project: default
   source:
     repoURL: https://github.com/oluwaTG/azure-devops-scripts.git
     targetRevision: main
