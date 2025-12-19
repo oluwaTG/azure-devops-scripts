@@ -39,12 +39,11 @@ resources:
 
 externalSecrets:
   enabled: true
-  secretStore:
-    name: github-secret-store
-    provider: github
+  clusterSecretStore:
+    name: github-cluster-secret-store
+  github:
+    owner: oluwaTG
+    repo: movies-app
   secret:
     name: movies-db-secret
     refreshInterval: 1h
-  github:
-    owner: oluwaTG
-    repo: azure-devops-secrets
