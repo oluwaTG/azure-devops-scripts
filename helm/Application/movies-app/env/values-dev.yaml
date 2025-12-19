@@ -13,5 +13,4 @@ hpa:
   enabled: true
 
 externalSecrets:
-  namespace: dev
   remoteKey: DEV_DATABASE_URL
