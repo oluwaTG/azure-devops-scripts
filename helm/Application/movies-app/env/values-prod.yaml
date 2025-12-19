@@ -14,3 +14,14 @@ hpa:
 
 externalSecrets:
   remoteKey: PROD_DATABASE_URL
+
+ingress:
+  enabled: true
+  hosts:
+    - host: movies.local
+      paths:
+        - path: /
+          pathType: Prefix
+  service:
+    name: movies-prod-active
+    port: 80

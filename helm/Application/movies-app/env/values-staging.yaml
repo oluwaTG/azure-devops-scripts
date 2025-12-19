@@ -14,3 +14,14 @@ hpa:
 
 externalSecrets:
   remoteKey: STAGING_DATABASE_URL
+
+ingress:
+  enabled: true
+  hosts:
+    - host: movies-staging.local
+      paths:
+        - path: /
+          pathType: Prefix
+  service:
+    name: movies-staging
+    port: 80
