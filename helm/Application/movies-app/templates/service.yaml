@@ -5,8 +5,12 @@ metadata:
   labels:
 {{ toYaml .Values.labels | indent 4 }}
 spec:
-  type: {{ .Values.service.type }}
+  type: ClusterIP
   ports:
     - protocol: TCP
       port: {{ .Values.service.port }}
       targetPort: {{ .Values.service.targetPort }}
+{{- if not .Values.rollout.enabled }}
+  selector:
+{{ toYaml .Values.labels | indent 4 }}
+{{- end }}
