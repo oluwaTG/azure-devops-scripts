@@ -18,6 +18,16 @@ spec:
       labels:
         app: {{ .Release.Name }}
     spec:
+      {{- if .Values.dbSeed.enabled }}
+      initContainers:
+        - name: db-seed
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python", "app/seed.py"]
+          envFrom:
+            - secretRef:
+                name: movies-db-secret
+      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
