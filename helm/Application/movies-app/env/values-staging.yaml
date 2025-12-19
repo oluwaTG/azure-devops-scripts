@@ -11,3 +11,7 @@ rollout:
 
 hpa:
   enabled: true
+
+externalSecrets:
+  namespace: staging
+  remoteKey: STAGING_DATABASE_URL

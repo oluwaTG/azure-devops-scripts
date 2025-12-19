@@ -11,3 +11,7 @@ rollout:
 
 hpa:
   enabled: true
+
+externalSecrets:
+  namespace: prod
+  remoteKey: PROD_DATABASE_URL

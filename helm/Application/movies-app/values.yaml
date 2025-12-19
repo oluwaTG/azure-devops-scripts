@@ -36,3 +36,15 @@ resources:
   limits:
     cpu: 500m
     memory: 512Mi
+
+externalSecrets:
+  enabled: true
+  secretStore:
+    name: github-secret-store
+    provider: github
+  secret:
+    name: movies-db-secret
+    refreshInterval: 1h
+  github:
+    owner: oluwaTG
+    repo: azure-devops-secrets
