@@ -20,7 +20,7 @@ ingress:
   hosts:
     - host: movies-dev.local
       paths:
-        - path: /health
+        - path: /
           pathType: Prefix
   service:
     name: movies-dev
