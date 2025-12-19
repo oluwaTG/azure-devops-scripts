@@ -23,5 +23,5 @@ ingress:
         - path: /
           pathType: Prefix
   service:
-    name: movies-prod-active
-    port: 80
+    name: movies-prod
+    port: 8000

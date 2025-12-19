@@ -24,4 +24,4 @@ ingress:
           pathType: Prefix
   service:
     name: movies-staging
-    port: 80
+    port: 8000
