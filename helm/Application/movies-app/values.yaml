@@ -47,3 +47,10 @@ externalSecrets:
   secret:
     name: movies-db-secret
     refreshInterval: 1h
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations: {}
+  hosts: []
+  tls: []
