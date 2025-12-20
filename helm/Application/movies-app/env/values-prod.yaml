@@ -25,3 +25,7 @@ ingress:
   service:
     name: movies-prod
     port: 80
+
+previewIngress:
+  enabled: true
+  host: movies-preview.local

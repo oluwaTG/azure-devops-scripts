@@ -54,3 +54,6 @@ ingress:
   annotations: {}
   hosts: []
   tls: []
+
+previewIngress:
+  enabled: false

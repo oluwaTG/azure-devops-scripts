@@ -5,6 +5,6 @@ metadata:
   name: {{ .Release.Name }}-preview
 spec:
   ports:
-    - port: 80
+    - port: {{ .Values.service.port }}
       targetPort: {{ .Values.service.targetPort }}
 {{- end }}
