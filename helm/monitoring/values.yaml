@@ -1,0 +1,15 @@
+kube-prometheus-stack:
+  grafana:
+    enabled: true
+    service:
+      type: ClusterIP
+
+  prometheus:
+    prometheusSpec:
+      retention: 3d
+      serviceMonitorSelectorNilUsesHelmValues: false
+      serviceMonitorNamespaceSelector:
+        any: true
+
+  alertmanager:
+    enabled: true

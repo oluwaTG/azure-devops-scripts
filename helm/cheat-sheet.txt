@@ -1,0 +1,163 @@
+############################################
+# KUBECTL CHEAT SHEET
+############################################
+
+# ----- Cluster & Context -----
+kubectl config get-contexts
+kubectl config use-context <context-name>
+kubectl cluster-info
+
+# ----- Namespaces -----
+kubectl get ns
+kubectl create ns <namespace>
+kubectl delete ns <namespace>
+
+# ----- Pods -----
+kubectl get pods -n <namespace>
+kubectl get pods -o wide -n <namespace>
+kubectl describe pod <pod-name> -n <namespace>
+kubectl logs <pod-name> -n <namespace>
+kubectl logs <pod-name> -c <container-name> -n <namespace>
+kubectl exec -it <pod-name> -n <namespace> -- /bin/sh
+
+# ----- Deployments -----
+kubectl get deploy -n <namespace>
+kubectl describe deploy <deploy-name> -n <namespace>
+kubectl rollout status deploy <deploy-name> -n <namespace>
+kubectl rollout history deploy <deploy-name> -n <namespace>
+kubectl rollout undo deploy <deploy-name> -n <namespace>
+
+# ----- Services -----
+kubectl get svc -n <namespace>
+kubectl describe svc <service-name> -n <namespace>
+
+# ----- Ingress -----
+kubectl get ingress -n <namespace>
+kubectl describe ingress <ingress-name> -n <namespace>
+
+# ----- ConfigMaps & Secrets -----
+kubectl get cm -n <namespace>
+kubectl describe cm <cm-name> -n <namespace>
+kubectl get secret -n <namespace>
+kubectl describe secret <secret-name> -n <namespace>
+
+# ----- Apply / Delete -----
+kubectl apply -f manifest.yaml
+kubectl delete -f manifest.yaml
+
+# ----- Troubleshooting -----
+kubectl get events -n <namespace>
+kubectl top pods -n <namespace>
+kubectl top nodes
+
+
+############################################
+# ARGO CD CHEAT SHEET
+############################################
+
+# ----- Login -----
+argocd login <argo-server>
+
+# ----- Applications -----
+argocd app list
+argocd app get <app-name>
+argocd app diff <app-name>
+argocd app sync <app-name>
+argocd app sync <app-name> --prune
+argocd app delete <app-name>
+
+# ----- App Status -----
+argocd app wait <app-name>
+argocd app history <app-name>
+
+# ----- Rollback -----
+argocd app rollback <app-name> <revision>
+
+# ----- Projects -----
+argocd proj list
+argocd proj get <project-name>
+
+# ----- Repo Management -----
+argocd repo list
+argocd repo add <repo-url>
+
+# ----- Cluster Management -----
+argocd cluster list
+
+# ----- Useful Debug -----
+kubectl get applications -n argocd
+kubectl describe application <app-name> -n argocd
+
+
+############################################
+# ARGO ROLLOUTS CHEAT SHEET
+############################################
+
+# ----- Install kubectl plugin (once) -----
+kubectl argo rollouts version
+
+# ----- Rollouts -----
+kubectl argo rollouts get rollout <rollout-name> -n <namespace>
+kubectl argo rollouts describe rollout <rollout-name> -n <namespace>
+kubectl argo rollouts status rollout <rollout-name> -n <namespace>
+
+# ----- Blue-Green / Canary Control -----
+kubectl argo rollouts promote <rollout-name> -n <namespace>
+kubectl argo rollouts abort <rollout-name> -n <namespace>
+kubectl argo rollouts retry <rollout-name> -n <namespace>
+
+# ----- History -----
+kubectl argo rollouts history <rollout-name> -n <namespace>
+
+# ----- Traffic & Analysis -----
+kubectl argo rollouts dashboard
+
+
+############################################
+# HELM CHEAT SHEET
+############################################
+
+# ----- Helm Basics -----
+helm version
+helm help
+
+# ----- Repositories -----
+helm repo list
+helm repo add <repo-name> <repo-url>
+helm repo update
+
+# ----- Create Chart -----
+helm create my-chart
+
+# ----- Chart Dependencies -----
+cd my-chart
+helm dependency update
+helm dependency build
+
+# ----- Install / Upgrade -----
+helm install <release-name> .
+helm upgrade <release-name> .
+helm upgrade --install <release-name> .
+
+# ----- List & Status -----
+helm list
+helm list -n <namespace>
+helm status <release-name>
+
+# ----- Rollback -----
+helm history <release-name>
+helm rollback <release-name> <revision>
+
+# ----- Uninstall -----
+helm uninstall <release-name>
+
+# ----- Debugging -----
+helm template .
+helm lint .
+helm get values <release-name>
+helm get manifest <release-name>
+
+
+############################################
+# END OF CHEAT SHEET
+############################################
