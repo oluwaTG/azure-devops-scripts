@@ -3,8 +3,6 @@ param(
   [switch]$AzCli,
   [switch]$DotNet,
   [switch]$NodeJs,
-
-  # Core DevOps workshop tools
   [switch]$DockerDesktop,
   [switch]$DockerEngine,
   [switch]$Terraform,
@@ -15,7 +13,8 @@ param(
   [switch]$Jq,
   [switch]$Yq,
   [switch]$Bicep,
-  [switch]$Make
+  [switch]$Make,
+  [switch]$Minikube
 )
 
 $ErrorActionPreference = 'Stop'
@@ -110,6 +109,8 @@ try {
   if ($DockerDesktop) { Install-ChocoPackage "docker-desktop" }
   if ($DockerEngine)  { Install-ChocoPackage "docker-engine" }
 
+  # Kubernetes
+  if ($Minikube)  { Install-ChocoPackage "minikube" }
   Write-Step "All done."
 }
 catch {
