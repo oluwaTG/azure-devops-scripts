@@ -40,7 +40,6 @@ $Phase2Marker = Join-Path $StateDir "phase2.done"
 New-Item -ItemType Directory -Force -Path $StateDir | Out-Null
 
 # We only need WSL if we want Minikube in WSL (and kubectl/helm there)
-# You said you want kubectl/helm/minikube INSIDE WSL.
 $NeedsWslTools = ($Kubectl -or $Helm -or $Minikube)
 
 # Track whether we need a reboot at the end of Phase 1
@@ -173,8 +172,6 @@ function Install-WslTools-Phase2 {
 
   Write-Step "PHASE 2: Installing kubectl/helm/minikube inside WSL (Ubuntu)..."
 
-  # Install inside WSL using a single bash script (heredoc) to keep it self-contained.
-  # Uses Helm v4.0.4 binary release as you requested.
   $bash = @'
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
@@ -217,7 +214,6 @@ else
   echo "minikube already installed"
 fi
 
-# Start minikube (docker driver) if requested
 echo "Starting minikube (docker driver) ..."
 minikube delete || true
 minikube start --driver=docker || true
@@ -226,7 +222,6 @@ minikube status || true
 echo "=== WSL tools install completed: $(date -Is) ==="
 '@
 
-  # Run the script inside Ubuntu. `bash -lc` ensures PATH is correct.
   try {
     wsl -d Ubuntu -- bash -lc $bash | Out-Host
   } catch {
@@ -238,7 +233,7 @@ try {
   # -----------------------------
   # Phase 2: after reboot
   # -----------------------------
-  if (Test-Path $Phase1Marker -and -not (Test-Path $Phase2Marker)) {
+  if ((Test-Path $Phase1Marker) -and -not (Test-Path $Phase2Marker)) {
     Install-WslTools-Phase2
     New-Item -ItemType File -Path $Phase2Marker -Force | Out-Null
     Write-Step "PHASE 2 complete."
@@ -254,16 +249,13 @@ try {
 
   Write-Step "Starting tool installations..."
 
-  # Enable WSL features early (no reboot yet) so Docker Desktop can install cleanly
   Enable-WslFeaturesIfNeeded
 
-  # Original tools
   if ($VsCode) { Install-ChocoPackage "vscode" }
   if ($AzCli)  { Install-ChocoPackage "azure-cli" }
   if ($DotNet) { Install-ChocoPackage "dotnet-sdk" }
   if ($NodeJs) { Install-ChocoPackage "nodejs-lts" }
 
-  # DevOps workshop essentials
   if ($Git)       { Install-ChocoPackage "git" }
   if ($Python)    { Install-ChocoPackage "python" }
   if ($Terraform) { Install-ChocoPackage "terraform" }
@@ -273,10 +265,8 @@ try {
   if ($Yq)        { Install-ChocoPackage "yq" }
   if ($Make)      { Install-ChocoPackage "make" }
 
-  # Azure IaC tooling
   if ($Bicep)     { Install-ChocoPackage "bicep" }
 
-  # Docker options
   if ($DockerDesktop) {
     Install-ChocoPackage "docker-desktop"
     $NeedsRestart = $true
@@ -286,16 +276,12 @@ try {
     Install-ChocoPackage "docker-engine"
   }
 
-  # IMPORTANT CHANGE:
-  # Do NOT start Minikube on Windows with docker driver (unsupported on windows/amd64).
-  # We'll start Minikube in WSL during Phase 2.
   if ($Minikube) {
     Install-ChocoPackage "minikube"
     Write-Step "Minikube installed on Windows. It will be started inside WSL after reboot (Phase 2)."
     $NeedsRestart = $true
   }
 
-  # Mark Phase 1 complete before reboot so we can continue with Phase 2
   New-Item -ItemType File -Path $Phase1Marker -Force | Out-Null
 
   Write-Step "All done."
@@ -304,7 +290,6 @@ try {
     Write-Step "Restart required. Restarting now (after all tools installed)..."
     Restart-Computer -Force
   } else {
-    # If no restart needed, we can immediately run Phase 2 in the same session (rare).
     if ($NeedsWslTools -and -not (Test-Path $Phase2Marker)) {
       Install-WslTools-Phase2
       New-Item -ItemType File -Path $Phase2Marker -Force | Out-Null
