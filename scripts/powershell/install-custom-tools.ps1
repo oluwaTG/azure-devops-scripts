@@ -31,7 +31,19 @@ function Write-Step($msg) {
   Write-Output "[$ts] $msg"
 }
 
-# Track whether we need a reboot at the end
+# -----------------------------
+# Phase markers (prevents loops)
+# -----------------------------
+$StateDir     = "C:\ProgramData\DevOpsSetup"
+$Phase1Marker = Join-Path $StateDir "phase1.done"
+$Phase2Marker = Join-Path $StateDir "phase2.done"
+New-Item -ItemType Directory -Force -Path $StateDir | Out-Null
+
+# We only need WSL if we want Minikube in WSL (and kubectl/helm there)
+# You said you want kubectl/helm/minikube INSIDE WSL.
+$NeedsWslTools = ($Kubectl -or $Helm -or $Minikube)
+
+# Track whether we need a reboot at the end of Phase 1
 $NeedsRestart = $false
 
 function Ensure-Chocolatey {
@@ -83,16 +95,15 @@ function Install-ChocoPackage {
 }
 
 function Enable-WslFeaturesIfNeeded {
-  # Only do this when Docker Desktop or Minikube is requested (client Windows scenario)
-  if (-not ($DockerDesktop -or $Minikube)) { return }
+  if (-not $NeedsWslTools) { return }
 
-  Write-Step "Ensuring WSL + VirtualMachinePlatform features are enabled (needed for Docker Desktop/WSL2)..."
+  Write-Step "Ensuring WSL + VirtualMachinePlatform features are enabled (needed for WSL2)..."
 
   $wsl = Get-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux -ErrorAction SilentlyContinue
   $vmp = Get-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -ErrorAction SilentlyContinue
 
   if ($null -eq $wsl -or $null -eq $vmp) {
-    Write-Warning "Could not query Windows optional features (possibly Windows Server). Skipping WSL enable."
+    Write-Warning "Could not query Windows optional features (possibly not Windows 10/11). Skipping WSL enable."
     return
   }
 
@@ -108,13 +119,21 @@ function Enable-WslFeaturesIfNeeded {
     $script:NeedsRestart = $true
   }
 
-  # Try to set WSL2 default; may fail until after reboot—non-fatal
   try {
     Write-Step "Setting WSL2 as default version..."
     wsl --set-default-version 2 | Out-Host
   } catch {
     Write-Warning "Could not set WSL2 default yet (often requires reboot)."
     $script:NeedsRestart = $true
+  }
+
+  # Ensure Ubuntu is installed (may complete after reboot)
+  try {
+    Write-Step "Ensuring Ubuntu distro is installed..."
+    wsl --install -d Ubuntu | Out-Host
+    $script:NeedsRestart = $true
+  } catch {
+    # On some builds this returns non-zero if already installed; ignore.
   }
 }
 
@@ -140,7 +159,7 @@ function Ensure-DockerDesktopService {
     }
   }
 
-  # Validate docker daemon connectivity (may still require reboot/WSL init)
+  # Validate docker daemon connectivity (may still require WSL init)
   try {
     docker version | Out-Host
   } catch {
@@ -149,13 +168,93 @@ function Ensure-DockerDesktopService {
   }
 }
 
+function Install-WslTools-Phase2 {
+  if (-not $NeedsWslTools) { return }
+
+  Write-Step "PHASE 2: Installing kubectl/helm/minikube inside WSL (Ubuntu)..."
+
+  # Install inside WSL using a single bash script (heredoc) to keep it self-contained.
+  # Uses Helm v4.0.4 binary release as you requested.
+  $bash = @'
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+
+echo "=== WSL tools install started: $(date -Is) ==="
+sudo apt-get update -y
+
+# kubectl (stable repo method)
+if ! command -v kubectl >/dev/null 2>&1; then
+  sudo install -d -m 0755 /etc/apt/keyrings
+  curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key \
+    | gpg --dearmor \
+    | sudo tee /etc/apt/keyrings/kubernetes-apt-keyring.gpg > /dev/null
+  echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /" \
+    | sudo tee /etc/apt/sources.list.d/kubernetes.list > /dev/null
+  sudo apt-get update -y
+  sudo apt-get install -y kubectl
+else
+  echo "kubectl already installed"
+fi
+
+# helm (binary release)
+if ! command -v helm >/dev/null 2>&1; then
+  TMPDIR="$(mktemp -d)"
+  curl -fsSL -o "${TMPDIR}/helm-v4.0.4-linux-amd64.tar.gz" https://get.helm.sh/helm-v4.0.4-linux-amd64.tar.gz
+  tar -zxvf "${TMPDIR}/helm-v4.0.4-linux-amd64.tar.gz" -C "${TMPDIR}" >/dev/null
+  sudo mv "${TMPDIR}/linux-amd64/helm" /usr/local/bin/helm
+  sudo chmod +x /usr/local/bin/helm
+  rm -rf "${TMPDIR}"
+  helm version --short || true
+else
+  echo "helm already installed"
+fi
+
+# minikube (binary)
+if ! command -v minikube >/dev/null 2>&1; then
+  curl -fsSL -o /usr/local/bin/minikube https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+  sudo chmod +x /usr/local/bin/minikube
+else
+  echo "minikube already installed"
+fi
+
+# Start minikube (docker driver) if requested
+echo "Starting minikube (docker driver) ..."
+minikube delete || true
+minikube start --driver=docker || true
+minikube status || true
+
+echo "=== WSL tools install completed: $(date -Is) ==="
+'@
+
+  # Run the script inside Ubuntu. `bash -lc` ensures PATH is correct.
+  try {
+    wsl -d Ubuntu -- bash -lc $bash | Out-Host
+  } catch {
+    Write-Warning "WSL tool installation failed (non-fatal). WSL/Docker may still be initializing."
+  }
+}
+
 try {
+  # -----------------------------
+  # Phase 2: after reboot
+  # -----------------------------
+  if (Test-Path $Phase1Marker -and -not (Test-Path $Phase2Marker)) {
+    Install-WslTools-Phase2
+    New-Item -ItemType File -Path $Phase2Marker -Force | Out-Null
+    Write-Step "PHASE 2 complete."
+    Write-Step "All done."
+    return
+  }
+
+  # -----------------------------
+  # Phase 1: normal windows installs
+  # -----------------------------
   Ensure-Chocolatey
   choco feature enable -n allowGlobalConfirmation | Out-Host
 
   Write-Step "Starting tool installations..."
 
-  # Enable WSL features early (no reboot yet) so Docker Desktop install can complete cleanly
+  # Enable WSL features early (no reboot yet) so Docker Desktop can install cleanly
   Enable-WslFeaturesIfNeeded
 
   # Original tools
@@ -178,48 +277,39 @@ try {
   if ($Bicep)     { Install-ChocoPackage "bicep" }
 
   # Docker options
-  # NOTE: Docker Desktop is for Windows 10/11. On Windows Server prefer Docker Engine.
   if ($DockerDesktop) {
     Install-ChocoPackage "docker-desktop"
-    # Docker Desktop almost always requires reboot/first login to finish initializing WSL backend
     $NeedsRestart = $true
     Ensure-DockerDesktopService
   }
+  if ($DockerEngine) {
+    Install-ChocoPackage "docker-engine"
+  }
 
-  if ($DockerEngine)  { Install-ChocoPackage "docker-engine" }
-
-  # Kubernetes / Minikube
+  # IMPORTANT CHANGE:
+  # Do NOT start Minikube on Windows with docker driver (unsupported on windows/amd64).
+  # We'll start Minikube in WSL during Phase 2.
   if ($Minikube) {
     Install-ChocoPackage "minikube"
-
-    Write-Step "Configuring Minikube to use Docker driver by default..."
-    try { minikube config set driver docker | Out-Host } catch {}
-
-    Write-Step "Starting Minikube with Docker driver..."
-    try {
-      if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-        Write-Warning "Docker CLI not found. Install Docker Desktop (Win10/11) or Docker Engine (Server) before starting Minikube."
-      } else {
-        # If docker daemon isn't ready, don't fail the whole extension
-        docker info | Out-Null
-
-        Write-Step "Deleting any existing Minikube cluster (avoid driver mismatch)..."
-        minikube delete | Out-Host
-
-        minikube start --driver=docker | Out-Host
-      }
-    }
-    catch {
-      Write-Warning "Minikube was installed but could not start yet. Likely needs reboot / Docker daemon readiness."
-      $NeedsRestart = $true
-    }
+    Write-Step "Minikube installed on Windows. It will be started inside WSL after reboot (Phase 2)."
+    $NeedsRestart = $true
   }
+
+  # Mark Phase 1 complete before reboot so we can continue with Phase 2
+  New-Item -ItemType File -Path $Phase1Marker -Force | Out-Null
 
   Write-Step "All done."
 
   if ($NeedsRestart) {
     Write-Step "Restart required. Restarting now (after all tools installed)..."
     Restart-Computer -Force
+  } else {
+    # If no restart needed, we can immediately run Phase 2 in the same session (rare).
+    if ($NeedsWslTools -and -not (Test-Path $Phase2Marker)) {
+      Install-WslTools-Phase2
+      New-Item -ItemType File -Path $Phase2Marker -Force | Out-Null
+      Write-Step "PHASE 2 complete."
+    }
   }
 }
 catch {
