@@ -209,9 +209,9 @@ install_docker () {
   install_pkg docker-ce
   install_pkg docker.io
   install_pkg docker-ce-cli
-  install_pkg containerd.io
-  install_pkg docker-buildx-plugin
-  install_pkg docker-compose-plugin
+#   install_pkg containerd.io
+#   install_pkg docker-buildx-plugin
+#   install_pkg docker-compose-plugin
 
   # Add current user to docker group (takes effect next login)
   if id -nG "$USER" | grep -qw docker; then
