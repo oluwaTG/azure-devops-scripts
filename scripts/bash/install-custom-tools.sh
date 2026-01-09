@@ -207,7 +207,7 @@ install_minikube () {
   chmod +x /usr/local/bin/minikube
   echo "Minikube installed."
   echo "Starting Minikube with Docker driver..."
-  mi
+  minikube start --driver=docker || true
 }
 
 # ---- Execution ----

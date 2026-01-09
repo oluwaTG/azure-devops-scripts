@@ -110,7 +110,17 @@ try {
   if ($DockerEngine)  { Install-ChocoPackage "docker-engine" }
 
   # Kubernetes
-  if ($Minikube)  { Install-ChocoPackage "minikube" }
+  if ($Minikube) {
+    Install-ChocoPackage "minikube"
+
+    Write-Step "Starting Minikube with Docker driver..."
+    try {
+        minikube start --driver=docker
+    }
+    catch {
+        Write-Warning "Minikube start failed (non-fatal). Docker may require reboot or user re-login."
+    }
+  }
   Write-Step "All done."
 }
 catch {
