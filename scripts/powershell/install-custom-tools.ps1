@@ -1,8 +1,8 @@
 param(
-  [bool]$VsCode = $false,
-  [bool]$AzCli  = $false,
-  [bool]$DotNet = $false,
-  [bool]$NodeJs = $false
+  [switch]$VsCode,
+  [switch]$AzCli,
+  [switch]$DotNet,
+  [switch]$NodeJs
 )
 
 $ErrorActionPreference = 'Stop'
