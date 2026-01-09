@@ -127,18 +127,47 @@ install_kubectl () {
 }
 
 install_helm () {
-  echo "Installing Helm..."
-  sudo install -d -m 0755 /etc/apt/keyrings
-  curl -fsSL https://baltocdn.com/helm/signing.asc \
-    | gpg --dearmor \
-    | sudo tee /etc/apt/keyrings/helm.gpg > /dev/null
+  echo "Installing Helm (binary release)..."
 
-  echo "deb [signed-by=/etc/apt/keyrings/helm.gpg] https://baltocdn.com/helm/stable/debian/ all main" \
-    | sudo tee /etc/apt/sources.list.d/helm-stable-debian.list > /dev/null
+  # Skip if already installed
+  if command -v helm >/dev/null 2>&1; then
+    echo "Already installed: helm ($(helm version --short 2>/dev/null || true))"
+    return
+  fi
 
-  apt_update
-  install_pkg helm
+  # Ensure prerequisites
+  install_pkg tar
+  install_pkg ca-certificates
+  install_pkg curl
+
+  # This is your requested link/version
+  HELM_URL="https://get.helm.sh/helm-v4.0.4-linux-amd64.tar.gz"
+
+  TMPDIR="$(mktemp -d)"
+  TARBALL="${TMPDIR}/helm-v4.0.4-linux-amd64.tar.gz"
+
+  echo "Downloading: ${HELM_URL}"
+  curl -fsSL -o "${TARBALL}" "${HELM_URL}"
+
+  echo "Unpacking..."
+  tar -zxvf "${TARBALL}" -C "${TMPDIR}" >/dev/null
+
+  if [ ! -f "${TMPDIR}/linux-amd64/helm" ]; then
+    echo "ERROR: helm binary not found after unpacking."
+    rm -rf "${TMPDIR}"
+    return 1
+  fi
+
+  echo "Installing to /usr/local/bin/helm..."
+  sudo mv "${TMPDIR}/linux-amd64/helm" /usr/local/bin/helm
+  sudo chmod +x /usr/local/bin/helm
+
+  rm -rf "${TMPDIR}"
+
+  echo "Helm installed:"
+  helm version --short || true
 }
+
 
 install_jq () {
   echo "Installing jq..."
