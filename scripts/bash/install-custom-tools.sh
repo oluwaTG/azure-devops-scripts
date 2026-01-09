@@ -219,17 +219,8 @@ install_docker () {
 
 install_minikube () {
   echo "Installing Minikube..."
-  if ! command -v kubectl >/dev/null 2>&1; then
-    echo "kubectl not found. Minikube requires kubectl."
-    return
-  fi
-  if ! command -v docker >/dev/null 2>&1; then
-    echo "Docker not found. Minikube requires Docker driver."
-    return
-  fi
-  curl -fsSL -o /usr/local/bin/minikube \
-    https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
-  chmod +x /usr/local/bin/minikube
+  curl -LO https://github.com/kubernetes/minikube/releases/latest/download/minikube-linux-amd64
+  sudo install minikube-linux-amd64 /usr/local/bin/minikube && rm minikube-linux-amd64
   echo "Minikube installed."
   echo "Starting Minikube with Docker driver..."
   minikube start --driver=docker || true
