@@ -178,6 +178,7 @@ install_docker () {
 
   apt_update
   install_pkg docker-ce
+  install_pkg docker.io
   install_pkg docker-ce-cli
   install_pkg containerd.io
   install_pkg docker-buildx-plugin
