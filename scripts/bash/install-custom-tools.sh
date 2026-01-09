@@ -24,6 +24,7 @@ YQ="${11:-false}"
 BICEP="${12:-false}"
 MAKE="${13:-false}"
 DOCKER="${14:-false}"
+MINIKUBE="${15:-false}"
 
 as_bool () {
   [[ "${1}" == "true" ]]
@@ -191,6 +192,29 @@ install_docker () {
   fi
 }
 
+install_minikube () {
+  echo "Installing Minikube..."
+
+  if ! command -v kubectl >/dev/null 2>&1; then
+    echo "kubectl not found. Minikube requires kubectl."
+    return
+  fi
+
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "Docker not found. Minikube requires Docker driver."
+    return
+  fi
+
+  curl -fsSL -o /usr/local/bin/minikube \
+    https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+  chmod +x /usr/local/bin/minikube
+
+  echo "Minikube installed."
+
+  echo "Starting Minikube with Docker driver..."
+  mi
+}
+
 # ---- Execution ----
 ensure_prereqs
 
@@ -208,5 +232,6 @@ as_bool "$YQ"        && install_yq
 as_bool "$BICEP"     && install_bicep
 as_bool "$MAKE"      && install_make
 as_bool "$DOCKER"    && install_docker
+as_bool "$MINIKUBE"  && install_minikube
 
 echo "=== DevOps tools install completed: $(date -Is) ==="
