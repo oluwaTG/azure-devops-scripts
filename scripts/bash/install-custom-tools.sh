@@ -25,7 +25,9 @@ BICEP="${12:-false}"
 MAKE="${13:-false}"
 DOCKER="${14:-false}"
 MINIKUBE="${15:-false}"
+LOCAL_USER="${16:-}"
 RUN_USER="${SUDO_USER:-${USER:-$(id -un 2>/dev/null || echo "")}}"
+
 
 as_bool () {
   [[ "${1}" == "true" ]]
@@ -221,12 +223,17 @@ install_minikube () {
   sudo install /tmp/minikube-linux-amd64 /usr/local/bin/minikube
   rm -f /tmp/minikube-linux-amd64
   echo "Minikube installed."
-  echo "Starting Minikube with Docker driver..."
-  RUN_AS_USER="${SUDO_USER:-$(whoami)}"
-  echo "Using user for Minikube: $RUN_AS_USER"
-  sudo usermod -aG docker "$RUN_AS_USER" || true
-  echo "Starting Minikube with Docker driver as $RUN_AS_USER..."
-  sudo -u "$RUN_AS_USER" -E minikube start --driver=docker || true
+
+  if [[ -z "${LOCAL_USER}" ]]; then
+    echo "LOCAL_USER not provided; skipping minikube start."
+    return 0
+  fi
+
+  echo "Adding ${LOCAL_USER} to docker group..."
+  sudo usermod -aG docker "$LOCAL_USER" || true
+
+  echo "Starting Minikube with Docker driver as ${LOCAL_USER}..."
+  sudo -u "$LOCAL_USER" -E minikube start --driver=docker || true
 }
 
 # ---- Execution ----
