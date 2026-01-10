@@ -242,18 +242,42 @@ Log "=== WSL scheduled task started ==="
 Log ("Running as: {0}" -f (whoami))
 
 Log ("Installing distro '{0}' (no-launch)..." -f "ubuntu")
+# Install Ubuntu without launching
 try {
-    # Run the command, capture both stdout and stderr
-    $wslOutput = wsl --install Ubuntu --no-launch 2>&1
+    `$wslOutput = wsl --install Ubuntu --no-launch 2>&1
 
-    # Log every line individually
-    foreach ($line in $wslOutput) {
-        Log ("wsl-install: " + $line)
+    foreach (`$line in `$wslOutput) {
+        Log ("wsl-install: " + `$line)
     }
+
 } catch {
-    # Log the exception details
-    Log ("wsl --install threw an exception: " + $_.Exception.Message)
-    Log ("Full exception: " + $_.ToString())
+    Log ("wsl --install threw an exception: " + `$_.Exception.Message)
+    Log ("Full exception: " + `$_.ToString())
+}
+
+# Wait until Ubuntu is registered with WSL
+for (`$i = 0; `$i -lt 30; `$i++) {
+    try {
+        `$distros = wsl -l -q 2>&1 | ForEach-Object { `$_ }
+        Log ("WSL distros returned: " + (`$distros -join ", "))
+
+        if (`$distros -contains "Ubuntu") {
+            Log "Ubuntu distro registered."
+            break
+        } else {
+            Log "Ubuntu not registered yet; waiting 5s..."
+        }
+    } catch {
+        Log ("Error checking WSL distros: " + `$_.Exception.Message)
+        Log ("Full error: " + `$_.ToString())
+    }
+
+    Start-Sleep -Seconds 5
+}
+
+if (-not (`$distros -contains "Ubuntu")) {
+    Log "Ubuntu distro did not register after waiting; exiting."
+    exit 1
 }
 
 Log "Waiting 30 seconds after WSL install..."
