@@ -222,7 +222,7 @@ install_minikube () {
   rm -f /tmp/minikube-linux-amd64
   echo "Minikube installed."
   echo "Starting Minikube with Docker driver..."
-  minikube start --driver=docker || true
+  minikube start --driver=docker --force || true
 }
 
 # ---- Execution ----
