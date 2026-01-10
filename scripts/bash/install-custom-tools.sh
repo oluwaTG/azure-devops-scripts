@@ -222,8 +222,11 @@ install_minikube () {
   rm -f /tmp/minikube-linux-amd64
   echo "Minikube installed."
   echo "Starting Minikube with Docker driver..."
-  sudo usermod -aG docker "$RUN_USER"
-  sudo -u "$RUN_USER" -E minikube start --driver=docker || true
+  RUN_AS_USER="${SUDO_USER:-$(whoami)}"
+  echo "Using user for Minikube: $RUN_AS_USER"
+  sudo usermod -aG docker "$RUN_AS_USER" || true
+  echo "Starting Minikube with Docker driver as $RUN_AS_USER..."
+  sudo -u "$RUN_AS_USER" -E minikube start --driver=docker || true
 }
 
 # ---- Execution ----

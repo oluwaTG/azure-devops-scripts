@@ -149,8 +149,7 @@ function Enable-WslFeaturesIfNeeded {
 }
 
 # -----------------------------
-# IMPORTANT FIX: Do NOT validate docker daemon during extension run
-# It often isn't ready under SYSTEM and causes extension failure.
+# IMPORTANT: don't validate docker daemon during extension run
 # -----------------------------
 function Note-DockerDesktopInstalled {
   Write-Step "Docker Desktop installed. Skipping docker daemon validation during extension run."
@@ -221,7 +220,6 @@ minikube status || true
 echo "=== Ubuntu WSL tooling completed: $(date -Is) ==="
 '@
 
-  # Write with UTF8 no BOM, then normalize to LF in the scheduled task
   $bashContent | Set-Content -Path $wslBashPathWin -Encoding utf8
 
   # 2) Write the *scheduled task* PowerShell file (runs as the user)
@@ -261,25 +259,41 @@ Set-Content -Path `$bashWin -Value `$bashText -Encoding utf8
 "Executing WSL bash installer: `$bashWsl" | Out-File -FilePath `"$WslTaskLog`" -Append
 
 # Run it inside Ubuntu
-wsl -d Ubuntu -- bash -lc "chmod +x `$bashWsl && sudo -n true 2>/dev/null || true; `$bashWsl" 2>&1 |
+wsl -d Ubuntu -- bash -lc "chmod +x `$bashWsl && `$bashWsl" 2>&1 |
   Out-File -FilePath `"$WslTaskLog`" -Append -Encoding utf8
 
 "=== WSL scheduled task completed: `$(Get-Date -Format o) ===" | Out-File -FilePath `"$WslTaskLog`" -Append -Encoding utf8
 "@ | Set-Content -Path $WslTaskScript -Encoding utf8
 
-  # 3) Create the scheduled task (15 mins)
+  # 3) Create the scheduled task (15 mins) — FIXED /TR
   $startTime = (Get-Date).AddMinutes(15).ToString("HH:mm")
+  $psExe = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+
   Write-Step "Creating scheduled task '$WslTaskName' to run at $startTime as user '$RunAsUser'..."
 
-  schtasks /Delete /TN $WslTaskName /F 2>$null | Out-Null
+  Write-Step "Task script exists? $(Test-Path $WslTaskScript)"
+  Write-Step "Bash script exists? $(Test-Path $wslBashPathWin)"
+  Write-Step "PowerShell path exists? $(Test-Path $psExe)"
 
-  schtasks /Create /TN $WslTaskName `
-    /TR "powershell -NoProfile -ExecutionPolicy Bypass -File `"$WslTaskScript`"" `
-    /SC ONCE /ST $startTime /RL HIGHEST /RU $RunAsUser /RP $RunAsPassword /F | Out-Host
+  try { schtasks /Delete /TN $WslTaskName /F 2>$null | Out-Null } catch {}
 
-  Write-Step "Scheduled task created. It will run WSL installs as the user in ~15 minutes."
+  $taskCmd = "`"$psExe`" -NoProfile -ExecutionPolicy Bypass -File `"$WslTaskScript`""
+  Write-Step "schtasks /TR will be: $taskCmd"
+
+  try {
+    $out = schtasks /Create /TN $WslTaskName `
+      /TR $taskCmd `
+      /SC ONCE /ST $startTime /RL HIGHEST /RU $RunAsUser /RP $RunAsPassword /F 2>&1
+
+    $out | ForEach-Object { Write-Step "schtasks: $_" }
+    Write-Step "Scheduled task created. It will run WSL installs as the user in ~15 minutes."
+  }
+  catch {
+    Write-Step "WARNING: Failed to create scheduled task: $($_.Exception.Message)"
+    # Do not fail the whole extension
+    return
+  }
 }
-
 
 # -----------------------------
 # Main
@@ -314,7 +328,6 @@ try {
   }
   if ($DockerEngine) {
     Install-ChocoPackage "docker-engine"
-    # No daemon checks here either (service setup differs)
     $NeedsRestart = $true
   }
 
