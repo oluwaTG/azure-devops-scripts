@@ -53,21 +53,21 @@ ensure_prereqs () {
   install_pkg lsb-release
 }
 
-install_vscode () {
-  echo "Installing VS Code..."
-  install_pkg wget
-  sudo install -d -m 0755 /etc/apt/keyrings
+# install_vscode () {
+#   echo "Installing VS Code..."
+#   install_pkg wget
+#   sudo install -d -m 0755 /etc/apt/keyrings
 
-  curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
-    | gpg --dearmor \
-    | sudo tee /etc/apt/keyrings/microsoft.gpg > /dev/null
+#   curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
+#     | gpg --dearmor \
+#     | sudo tee /etc/apt/keyrings/microsoft.gpg > /dev/null
 
-  echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/code stable main" \
-    | sudo tee /etc/apt/sources.list.d/vscode.list > /dev/null
+#   echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/code stable main" \
+#     | sudo tee /etc/apt/sources.list.d/vscode.list > /dev/null
 
-  apt_update
-  install_pkg code
-}
+#   apt_update
+#   install_pkg code
+# }
 
 install_azcli () {
   echo "Installing Azure CLI..."
@@ -228,7 +228,7 @@ install_minikube () {
 # ---- Execution ----
 ensure_prereqs
 
-as_bool "$VS_CODE"   && install_vscode
+# as_bool "$VS_CODE"   && install_vscode
 as_bool "$AZ_CLI"    && install_azcli
 as_bool "$DOTNET"    && install_dotnet
 as_bool "$NODEJS"    && install_nodejs
