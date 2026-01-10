@@ -14,7 +14,11 @@ param(
   [switch]$Yq,
   [switch]$Bicep,
   [switch]$Make,
-  [switch]$Minikube
+  [switch]$Minikube,
+
+  # Needed for scheduled task to run as USER (not SYSTEM)
+  [string]$RunAsUser = "",
+  [string]$RunAsPassword = ""
 )
 
 $ErrorActionPreference = 'Stop'
@@ -39,10 +43,13 @@ $Phase1Marker = Join-Path $StateDir "phase1.done"
 $Phase2Marker = Join-Path $StateDir "phase2.done"
 New-Item -ItemType Directory -Force -Path $StateDir | Out-Null
 
-# We only need WSL if we want Minikube in WSL (and kubectl/helm there)
+$WslTaskName    = "DevOps-WSL-Tooling"
+$WslTaskScript  = Join-Path $StateDir "run-wsl-tools.ps1"
+
+# WSL tooling requested?
 $NeedsWslTools = ($Kubectl -or $Helm -or $Minikube)
 
-# Track whether we need a reboot at the end of Phase 1
+# Track whether we need a reboot at the end
 $NeedsRestart = $false
 
 function Ensure-Chocolatey {
@@ -125,19 +132,9 @@ function Enable-WslFeaturesIfNeeded {
     Write-Warning "Could not set WSL2 default yet (often requires reboot)."
     $script:NeedsRestart = $true
   }
-
-  # Ensure Ubuntu is installed (may complete after reboot)
-  try {
-    Write-Step "Ensuring Ubuntu distro is installed..."
-    wsl --install -d Ubuntu | Out-Host
-    $script:NeedsRestart = $true
-  } catch {
-    # On some builds this returns non-zero if already installed; ignore.
-  }
 }
 
 function Ensure-DockerDesktopService {
-  # Docker Desktop service name
   $svcName = "com.docker.service"
   $svc = Get-Service -Name $svcName -ErrorAction SilentlyContinue
   if (-not $svc) {
@@ -158,7 +155,6 @@ function Ensure-DockerDesktopService {
     }
   }
 
-  # Validate docker daemon connectivity (may still require WSL init)
   try {
     docker version | Out-Host
   } catch {
@@ -167,19 +163,57 @@ function Ensure-DockerDesktopService {
   }
 }
 
-function Install-WslTools-Phase2 {
+function Register-WslToolingScheduledTask {
   if (-not $NeedsWslTools) { return }
 
-  Write-Step "PHASE 2: Installing kubectl/helm/minikube inside WSL (Ubuntu)..."
+  if ([string]::IsNullOrWhiteSpace($RunAsUser) -or [string]::IsNullOrWhiteSpace($RunAsPassword)) {
+    Write-Warning "WSL tooling requested, but RunAsUser/RunAsPassword not provided. Skipping scheduled task creation."
+    return
+  }
 
-  $bash = @'
+  # Write the script that the scheduled task will run AS THE USER
+  # It installs Ubuntu, then installs docker.io, kubectl, helm (binary), minikube, starts minikube.
+  @"
+`$ErrorActionPreference = 'Stop'
+`$ProgressPreference = 'SilentlyContinue'
+
+Write-Output "=== WSL scheduled task started at: `$(Get-Date) ==="
+Write-Output "Running as: `$(whoami)"
+
+# 1) Install Ubuntu distro (user context)
+try {
+  wsl --install -d Ubuntu | Out-Host
+} catch {
+  # If Ubuntu is already installed, this may throw or return non-zero; ignore.
+  Write-Warning "wsl --install returned non-zero (often means already installed). Continuing..."
+}
+
+Start-Sleep -Seconds 10
+
+# 2) Verify Ubuntu exists for this user
+`$distros = (wsl -l -q) 2>`$null
+if (-not (`$distros | Select-String -SimpleMatch "Ubuntu")) {
+  Write-Warning "Ubuntu distro not detected for this user yet. Exiting without marking phase2."
+  exit 0
+}
+
+# 3) Run Linux installs inside Ubuntu
+`$bash = @'
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
-echo "=== WSL tools install started: $(date -Is) ==="
+echo "=== Ubuntu WSL tooling started: $(date -Is) ==="
+
 sudo apt-get update -y
 
-# kubectl (stable repo method)
+# docker.io (Ubuntu package)
+if ! command -v docker >/dev/null 2>&1; then
+  sudo apt-get install -y docker.io
+  sudo systemctl enable docker || true
+  sudo systemctl start docker || true
+fi
+
+# kubectl (repo)
 if ! command -v kubectl >/dev/null 2>&1; then
   sudo install -d -m 0755 /etc/apt/keyrings
   curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key \
@@ -189,11 +223,9 @@ if ! command -v kubectl >/dev/null 2>&1; then
     | sudo tee /etc/apt/sources.list.d/kubernetes.list > /dev/null
   sudo apt-get update -y
   sudo apt-get install -y kubectl
-else
-  echo "kubectl already installed"
 fi
 
-# helm (binary release)
+# helm v4.0.4 (binary)
 if ! command -v helm >/dev/null 2>&1; then
   TMPDIR="$(mktemp -d)"
   curl -fsSL -o "${TMPDIR}/helm-v4.0.4-linux-amd64.tar.gz" https://get.helm.sh/helm-v4.0.4-linux-amd64.tar.gz
@@ -201,61 +233,58 @@ if ! command -v helm >/dev/null 2>&1; then
   sudo mv "${TMPDIR}/linux-amd64/helm" /usr/local/bin/helm
   sudo chmod +x /usr/local/bin/helm
   rm -rf "${TMPDIR}"
-  helm version --short || true
-else
-  echo "helm already installed"
 fi
 
 # minikube (binary)
 if ! command -v minikube >/dev/null 2>&1; then
-  curl -fsSL -o /usr/local/bin/minikube https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
+  sudo curl -fsSL -o /usr/local/bin/minikube https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
   sudo chmod +x /usr/local/bin/minikube
-else
-  echo "minikube already installed"
 fi
 
-echo "Starting minikube (docker driver) ..."
+# start minikube
 minikube delete || true
 minikube start --driver=docker || true
 minikube status || true
 
-echo "=== WSL tools install completed: $(date -Is) ==="
+echo "=== Ubuntu WSL tooling completed: $(date -Is) ==="
 '@
 
-  try {
-    wsl -d Ubuntu -- bash -lc $bash | Out-Host
-  } catch {
-    Write-Warning "WSL tool installation failed (non-fatal). WSL/Docker may still be initializing."
-  }
+wsl -d Ubuntu -- bash -lc "`$bash"
+
+"@ | Set-Content -Path $WslTaskScript -Encoding UTF8
+
+  # Calculate start time 15 minutes from now in HH:mm (schtasks uses local time)
+  $startTime = (Get-Date).AddMinutes(15).ToString("HH:mm")
+
+  Write-Step "Creating scheduled task '$WslTaskName' to run at $startTime as user '$RunAsUser'..."
+
+  # Delete existing if present
+  schtasks /Delete /TN $WslTaskName /F 2>$null | Out-Null
+
+  # Create one-time task (runs once)
+  schtasks /Create /TN $WslTaskName `
+    /TR "powershell -NoProfile -ExecutionPolicy Bypass -File `"$WslTaskScript`"" `
+    /SC ONCE /ST $startTime /RL HIGHEST /RU $RunAsUser /RP $RunAsPassword /F | Out-Host
+
+  Write-Step "Scheduled task created. It will run WSL installs as the user in ~15 minutes."
 }
 
 try {
-  # -----------------------------
-  # Phase 2: after reboot
-  # -----------------------------
-  if ((Test-Path $Phase1Marker) -and -not (Test-Path $Phase2Marker)) {
-    Install-WslTools-Phase2
-    New-Item -ItemType File -Path $Phase2Marker -Force | Out-Null
-    Write-Step "PHASE 2 complete."
-    Write-Step "All done."
-    return
-  }
-
-  # -----------------------------
-  # Phase 1: normal windows installs
-  # -----------------------------
   Ensure-Chocolatey
   choco feature enable -n allowGlobalConfirmation | Out-Host
 
   Write-Step "Starting tool installations..."
 
+  # Enable WSL features early (no reboot yet)
   Enable-WslFeaturesIfNeeded
 
+  # Original tools
   if ($VsCode) { Install-ChocoPackage "vscode" }
   if ($AzCli)  { Install-ChocoPackage "azure-cli" }
   if ($DotNet) { Install-ChocoPackage "dotnet-sdk" }
   if ($NodeJs) { Install-ChocoPackage "nodejs-lts" }
 
+  # DevOps workshop essentials
   if ($Git)       { Install-ChocoPackage "git" }
   if ($Python)    { Install-ChocoPackage "python" }
   if ($Terraform) { Install-ChocoPackage "terraform" }
@@ -264,24 +293,29 @@ try {
   if ($Jq)        { Install-ChocoPackage "jq" }
   if ($Yq)        { Install-ChocoPackage "yq" }
   if ($Make)      { Install-ChocoPackage "make" }
-
   if ($Bicep)     { Install-ChocoPackage "bicep" }
 
+  # Docker options
   if ($DockerDesktop) {
     Install-ChocoPackage "docker-desktop"
     $NeedsRestart = $true
     Ensure-DockerDesktopService
   }
-  if ($DockerEngine) {
-    Install-ChocoPackage "docker-engine"
-  }
+  if ($DockerEngine)  { Install-ChocoPackage "docker-engine" }
 
+  # Minikube on Windows: install binary, but DO NOT start (docker driver unsupported on windows/amd64)
   if ($Minikube) {
     Install-ChocoPackage "minikube"
-    Write-Step "Minikube installed on Windows. It will be started inside WSL after reboot (Phase 2)."
-    $NeedsRestart = $true
+    Write-Step "Minikube installed on Windows. It will be started inside WSL by the scheduled task."
   }
 
+  # Create scheduled task at the end (enough time for reboot)
+  if ($NeedsWslTools) {
+    Register-WslToolingScheduledTask
+    $NeedsRestart = $true  # WSL feature enable typically requires restart anyway
+  }
+
+  # Mark phase 1 done
   New-Item -ItemType File -Path $Phase1Marker -Force | Out-Null
 
   Write-Step "All done."
@@ -289,12 +323,6 @@ try {
   if ($NeedsRestart) {
     Write-Step "Restart required. Restarting now (after all tools installed)..."
     Restart-Computer -Force
-  } else {
-    if ($NeedsWslTools -and -not (Test-Path $Phase2Marker)) {
-      Install-WslTools-Phase2
-      New-Item -ItemType File -Path $Phase2Marker -Force | Out-Null
-      Write-Step "PHASE 2 complete."
-    }
   }
 }
 catch {
