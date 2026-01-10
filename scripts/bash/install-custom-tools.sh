@@ -223,8 +223,7 @@ install_minikube () {
   echo "Minikube installed."
   echo "Starting Minikube with Docker driver..."
   sudo usermod -aG docker "$RUN_USER"
-  newgrp docker
-  minikube start --driver=docker || true
+  sudo -u "$RUN_USER" -E minikube start --driver=docker || true
 }
 
 # ---- Execution ----
