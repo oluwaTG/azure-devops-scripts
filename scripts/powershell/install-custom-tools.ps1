@@ -228,12 +228,13 @@ echo "=== Ubuntu WSL tooling completed: $(date -Is) ==="
   # - waits 30s, then POLLS up to 5 mins for distros
   # - selects Ubuntu* dynamically (Ubuntu / Ubuntu-22.04), else first distro
   # - logs line-by-line safely
-  @"
+@"
 `$ErrorActionPreference = 'Continue'
 `$ProgressPreference = 'SilentlyContinue'
 
 function Log([string]`$m) {
-  (`"[{0}] {1}`" -f (Get-Date -Format o), `$m) | Out-File -FilePath `"$WslTaskLog`" -Append -Encoding utf8
+  (`"[{0}] {1}`" -f (Get-Date -Format o), `$m) |
+    Out-File -FilePath `"$WslTaskLog`" -Append -Encoding utf8
 }
 
 New-Item -ItemType Directory -Force -Path `"$LogsDir`" | Out-Null
@@ -244,54 +245,44 @@ Log ("Running as: {0}" -f (whoami))
 
 Log ("Installing distro '{0}' (no-launch)..." -f `$target)
 try {
-  wsl --install -d `$target --no-launch 2>&1 | ForEach-Object { Log ("wsl-install: " + `$_) }
+  wsl --install `$target --no-launch 2>&1 |
+    ForEach-Object { Log ("wsl-install: " + `$_) }
 } catch {
   Log ("wsl --install threw: " + `$_)
 }
 
+Log "Waiting 30 seconds after WSL install..."
 Start-Sleep -Seconds 30
 
-function Get-Distros {
-  try {
-    (wsl -l -q 2>`$null) | ForEach-Object { `$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace(`$_) }
-  } catch { @() }
+# Wait until Ubuntu is registered with WSL
+for (`$i = 0; `$i -lt 30; `$i++) {
+  if (wsl -l -q | Where-Object { `$_ -eq "Ubuntu" }) {
+    Log "Ubuntu distro registered."
+    break
+  }
+  Log "Ubuntu not registered yet; waiting 5s..."
+  Start-Sleep -Seconds 5
 }
 
-`$distros = @()
-for (`$i=0; `$i -lt 30; `$i++) {
-  `$distros = Get-Distros
-  if (`$distros.Count -gt 0) { break }
-  Log "No distros detected yet; waiting 10s..."
-  Start-Sleep -Seconds 10
-}
-
-if (`$distros.Count -eq 0) {
-  Log "No distros detected after wait. Exiting."
-  exit 0
-}
-
-Log ("Detected distros: " + (`$distros -join ", "))
-
-`$distroName = (`$distros | Where-Object { `$_ -match "(?i)^ubuntu" } | Select-Object -First 1)
-if (-not `$distroName) { `$distroName = `$distros[0] }
-
-Log ("Selected distro: " + `$distroName)
-
-# Convert bash file to LF endings
+# Path to bash installer on Windows side
 `$bashWin = `"$wslBashPathWin`"
 if (-not (Test-Path `$bashWin)) {
   Log ("Bash installer not found: " + `$bashWin)
   exit 0
 }
 
+# Ensure LF line endings for bash
+Log "Normalizing bash script line endings..."
 `$bashText = Get-Content -Raw -Path `$bashWin
 `$bashText = `$bashText -replace "`r`n", "`n"
 Set-Content -Path `$bashWin -Value `$bashText -Encoding utf8
 
+# WSL-visible path
 `$bashWsl = "/mnt/c/ProgramData/DevOpsSetup/wsl-tools.sh"
-Log ("Executing WSL bash installer: " + `$bashWsl)
 
-wsl -d `$distroName -- bash -lc "chmod +x `$bashWsl && `$bashWsl" 2>&1 |
+Log ("Executing WSL bash installer in distro '{0}': {1}" -f `$target, `$bashWsl)
+
+wsl -d `$target -- bash -lc "chmod +x `$bashWsl && `$bashWsl" 2>&1 |
   ForEach-Object { Log ("wsl-run: " + `$_) }
 
 Log "=== WSL scheduled task completed ==="
