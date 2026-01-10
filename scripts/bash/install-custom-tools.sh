@@ -231,7 +231,7 @@ install_minikube () {
 
   echo "Adding ${LOCAL_USER} to docker group..."
   sudo usermod -aG docker "tuser" || true
-
+  newgrp docker
   echo "Starting Minikube with Docker driver as ${LOCAL_USER}..."
   sudo -u "tuser" -E minikube start --driver=docker || true
 }
