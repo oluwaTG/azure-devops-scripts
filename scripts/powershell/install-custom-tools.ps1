@@ -241,14 +241,19 @@ New-Item -ItemType Directory -Force -Path `"$LogsDir`" | Out-Null
 Log "=== WSL scheduled task started ==="
 Log ("Running as: {0}" -f (whoami))
 
-`$target = "Ubuntu"
-
-Log ("Installing distro '{0}' (no-launch)..." -f `$target)
+Log ("Installing distro '{0}' (no-launch)..." -f "ubuntu")
 try {
-  wsl --install `$target --no-launch 2>&1 |
-    ForEach-Object { Log ("wsl-install: " + `$_) }
+    # Run the command, capture both stdout and stderr
+    $wslOutput = wsl --install Ubuntu --no-launch 2>&1
+
+    # Log every line individually
+    foreach ($line in $wslOutput) {
+        Log ("wsl-install: " + $line)
+    }
 } catch {
-  Log ("wsl --install threw: " + `$_)
+    # Log the exception details
+    Log ("wsl --install threw an exception: " + $_.Exception.Message)
+    Log ("Full exception: " + $_.ToString())
 }
 
 Log "Waiting 30 seconds after WSL install..."
@@ -280,9 +285,9 @@ Set-Content -Path `$bashWin -Value `$bashText -Encoding utf8
 # WSL-visible path
 `$bashWsl = "/mnt/c/ProgramData/DevOpsSetup/wsl-tools.sh"
 
-Log ("Executing WSL bash installer in distro '{0}': {1}" -f `$target, `$bashWsl)
+Log ("Executing WSL bash installer in distro '{0}': {1}" -f ubuntu, `$bashWsl)
 
-wsl -d `$target -- bash -lc "chmod +x `$bashWsl && `$bashWsl" 2>&1 |
+wsl -d ubuntu -- bash -lc "chmod +x `$bashWsl && `$bashWsl" 2>&1 |
   ForEach-Object { Log ("wsl-run: " + `$_) }
 
 Log "=== WSL scheduled task completed ==="

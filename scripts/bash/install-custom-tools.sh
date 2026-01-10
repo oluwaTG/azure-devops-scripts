@@ -228,7 +228,10 @@ install_minikube () {
   newgrp docker
 #   sudo chown -R "tuser" $HOME/.minikube && chmod -R u+wrx $HOME/.minikube
   echo "Starting Minikube with Docker driver as ${LOCAL_USER}..."
-  sudo -u "tuser" -E minikube start --driver=docker || true
+  USER_HOME=$(getent passwd tuser | cut -d: -f6)
+  sudo mkdir -p "$USER_HOME/.minikube"
+  sudo chown -R tuser:tuser "$USER_HOME/.minikube"
+  sudo -u tuser env HOME="$USER_HOME" minikube start --driver=docker
 }
 
 # ---- Execution ----
