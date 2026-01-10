@@ -168,38 +168,18 @@ function Register-WslToolingScheduledTask {
     return
   }
 
-  Write-Step "Writing scheduled-task script to: $WslTaskScript"
+  $wslBashPathWin = Join-Path $StateDir "wsl-tools.sh"
 
-  @"
-`$ErrorActionPreference = 'Continue'
-`$ProgressPreference = 'SilentlyContinue'
+  Write-Step "Writing scheduled-task PS script to: $WslTaskScript"
+  Write-Step "Writing WSL bash installer to: $wslBashPathWin"
 
-New-Item -ItemType Directory -Force -Path `"$LogsDir`" | Out-Null
-"=== WSL scheduled task started: `$(Get-Date -Format o) ===" | Out-File -FilePath `"$WslTaskLog`" -Append -Encoding utf8
-"Running as: `$(whoami)" | Out-File -FilePath `"$WslTaskLog`" -Append -Encoding utf8
-
-try {
-  "Ensuring Ubuntu is installed..." | Out-File -FilePath `"$WslTaskLog`" -Append
-  wsl --install -d Ubuntu | Out-Host
-} catch {
-  "wsl --install returned non-zero (often means already installed). Continuing..." | Out-File -FilePath `"$WslTaskLog`" -Append
-}
-
-Start-Sleep -Seconds 15
-
-# Verify Ubuntu exists for this user
-`$distros = (wsl -l -q) 2>`$null
-if (-not (`$distros | Select-String -SimpleMatch "Ubuntu")) {
-  "Ubuntu distro not detected for this user yet. Exiting." | Out-File -FilePath `"$WslTaskLog`" -Append
-  exit 0
-}
-
-# Run Linux installs inside Ubuntu
-`$bash = @'
+  # 1) Write the bash file that will run *inside WSL*
+  $bashContent = @'
+#!/usr/bin/env bash
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
-echo "=== Ubuntu WSL tooling started: $(date) ==="
+echo "=== Ubuntu WSL tooling started: $(date -Is) ==="
 
 sudo apt-get update -y
 
@@ -221,7 +201,7 @@ fi
 if ! command -v helm >/dev/null 2>&1; then
   TMPDIR="$(mktemp -d)"
   curl -fsSL -o "${TMPDIR}/helm-v4.0.4-linux-amd64.tar.gz" https://get.helm.sh/helm-v4.0.4-linux-amd64.tar.gz
-  tar -zxvf "${TMPDIR}/helm-v4.0.4-linux-amd64.tar.gz" -C "${TMPDIR}" >/dev/null
+  tar -zxf "${TMPDIR}/helm-v4.0.4-linux-amd64.tar.gz" -C "${TMPDIR}"
   sudo mv "${TMPDIR}/linux-amd64/helm" /usr/local/bin/helm
   sudo chmod +x /usr/local/bin/helm
   rm -rf "${TMPDIR}"
@@ -233,20 +213,61 @@ if ! command -v minikube >/dev/null 2>&1; then
   sudo chmod +x /usr/local/bin/minikube
 fi
 
-# start minikube (docker driver)
+# start minikube (docker driver) — allow root contexts safely
 minikube delete || true
 minikube start --driver=docker --force || true
 minikube status || true
 
-echo "=== Ubuntu WSL tooling completed: $(date) ==="
+echo "=== Ubuntu WSL tooling completed: $(date -Is) ==="
 '@
 
-# IMPORTANT: pass as ONE argument safely
-wsl -d Ubuntu -- bash -lc "`"$bash`""
+  # Write with UTF8 no BOM, then normalize to LF in the scheduled task
+  $bashContent | Set-Content -Path $wslBashPathWin -Encoding utf8
+
+  # 2) Write the *scheduled task* PowerShell file (runs as the user)
+  @"
+`$ErrorActionPreference = 'Continue'
+`$ProgressPreference = 'SilentlyContinue'
+
+New-Item -ItemType Directory -Force -Path `"$LogsDir`" | Out-Null
+"=== WSL scheduled task started: `$(Get-Date -Format o) ===" | Out-File -FilePath `"$WslTaskLog`" -Append -Encoding utf8
+"Running as: `$(whoami)" | Out-File -FilePath `"$WslTaskLog`" -Append -Encoding utf8
+
+# Ensure Ubuntu distro is installed for THIS user
+try {
+  "Installing Ubuntu distro (if needed)..." | Out-File -FilePath `"$WslTaskLog`" -Append
+  wsl --install -d Ubuntu | Out-Host
+} catch {
+  "wsl --install returned non-zero (often means already installed). Continuing..." | Out-File -FilePath `"$WslTaskLog`" -Append
+}
+
+Start-Sleep -Seconds 20
+
+`$distros = (wsl -l -q) 2>`$null
+if (-not (`$distros | Select-String -SimpleMatch "Ubuntu")) {
+  "Ubuntu distro not detected yet for this user. Exiting." | Out-File -FilePath `"$WslTaskLog`" -Append
+  exit 0
+}
+
+# Convert bash file to LF endings (WSL bash can choke on CRLF)
+`$bashWin = `"$wslBashPathWin`"
+`$bashText = Get-Content -Raw -Path `$bashWin
+`$bashText = `$bashText -replace "`r`n", "`n"
+Set-Content -Path `$bashWin -Value `$bashText -Encoding utf8
+
+# Translate Windows path to /mnt/c/...
+`$bashWsl = "/mnt/c/ProgramData/DevOpsSetup/wsl-tools.sh"
+
+"Executing WSL bash installer: `$bashWsl" | Out-File -FilePath `"$WslTaskLog`" -Append
+
+# Run it inside Ubuntu
+wsl -d Ubuntu -- bash -lc "chmod +x `$bashWsl && sudo -n true 2>/dev/null || true; `$bashWsl" 2>&1 |
+  Out-File -FilePath `"$WslTaskLog`" -Append -Encoding utf8
 
 "=== WSL scheduled task completed: `$(Get-Date -Format o) ===" | Out-File -FilePath `"$WslTaskLog`" -Append -Encoding utf8
-"@ | Set-Content -Path $WslTaskScript -Encoding UTF8
+"@ | Set-Content -Path $WslTaskScript -Encoding utf8
 
+  # 3) Create the scheduled task (15 mins)
   $startTime = (Get-Date).AddMinutes(15).ToString("HH:mm")
   Write-Step "Creating scheduled task '$WslTaskName' to run at $startTime as user '$RunAsUser'..."
 
@@ -258,6 +279,7 @@ wsl -d Ubuntu -- bash -lc "`"$bash`""
 
   Write-Step "Scheduled task created. It will run WSL installs as the user in ~15 minutes."
 }
+
 
 # -----------------------------
 # Main
