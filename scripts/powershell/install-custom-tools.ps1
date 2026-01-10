@@ -25,33 +25,42 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-$logDir  = 'C:\Windows\Temp'
-$logFile = Join-Path $logDir 'toolinstall.log'
-New-Item -ItemType Directory -Force -Path $logDir | Out-Null
-Start-Transcript -Path $logFile -Append
+# -----------------------------
+# State + reliable logging
+# -----------------------------
+$StateDir   = "C:\ProgramData\DevOpsSetup"
+$LogsDir    = Join-Path $StateDir "logs"
+New-Item -ItemType Directory -Force -Path $LogsDir | Out-Null
+
+$LogFile    = Join-Path $LogsDir "install-custom-tools.log"
+$WslTaskLog = Join-Path $LogsDir "run-wsl-tools.log"
 
 function Write-Step($msg) {
   $ts = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
-  Write-Output "[$ts] $msg"
+  $line = "[$ts] $msg"
+  Write-Output $line
+  $line | Out-File -FilePath $LogFile -Append -Encoding utf8
 }
 
-# -----------------------------
-# Phase markers (prevents loops)
-# -----------------------------
-$StateDir     = "C:\ProgramData\DevOpsSetup"
+# transcript is nice-to-have only
+try { Start-Transcript -Path (Join-Path $LogsDir "transcript.log") -Append -ErrorAction SilentlyContinue | Out-Null } catch {}
+
+Write-Step "=== install-custom-tools.ps1 started ==="
+Write-Step "Running as: $([System.Security.Principal.WindowsIdentity]::GetCurrent().Name)"
+Write-Step "Args: VsCode=$VsCode AzCli=$AzCli DotNet=$DotNet NodeJs=$NodeJs DockerDesktop=$DockerDesktop DockerEngine=$DockerEngine Terraform=$Terraform Kubectl=$Kubectl Helm=$Helm Minikube=$Minikube"
+Write-Step "Needs WSL tools? $($Kubectl -or $Helm -or $Minikube)"
+
 $Phase1Marker = Join-Path $StateDir "phase1.done"
-$Phase2Marker = Join-Path $StateDir "phase2.done"
-New-Item -ItemType Directory -Force -Path $StateDir | Out-Null
 
-$WslTaskName    = "DevOps-WSL-Tooling"
-$WslTaskScript  = Join-Path $StateDir "run-wsl-tools.ps1"
+$WslTaskName   = "DevOps-WSL-Tooling"
+$WslTaskScript = Join-Path $StateDir "run-wsl-tools.ps1"
 
-# WSL tooling requested?
 $NeedsWslTools = ($Kubectl -or $Helm -or $Minikube)
+$NeedsRestart  = $false
 
-# Track whether we need a reboot at the end
-$NeedsRestart = $false
-
+# -----------------------------
+# Chocolatey helpers
+# -----------------------------
 function Ensure-Chocolatey {
   if (Test-Path 'C:\ProgramData\chocolatey\bin\choco.exe') {
     $env:Path += ';C:\ProgramData\chocolatey\bin'
@@ -60,7 +69,9 @@ function Ensure-Chocolatey {
   }
 
   Write-Step "Downloading Chocolatey installer..."
-  $chocoScript = Join-Path $logDir 'install-choco.ps1'
+  $tmp = "C:\Windows\Temp"
+  New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+  $chocoScript = Join-Path $tmp 'install-choco.ps1'
   Invoke-WebRequest -UseBasicParsing -Uri 'https://community.chocolatey.org/install.ps1' -OutFile $chocoScript
 
   Write-Step "Installing Chocolatey..."
@@ -80,7 +91,6 @@ function Install-ChocoPackage {
     [string]$Params = ""
   )
 
-  # best-effort skip if already installed
   $already = $false
   try {
     $list = choco list --local-only --exact $Name 2>$null
@@ -100,6 +110,9 @@ function Install-ChocoPackage {
   }
 }
 
+# -----------------------------
+# WSL feature enable (no hard-fails)
+# -----------------------------
 function Enable-WslFeaturesIfNeeded {
   if (-not $NeedsWslTools) { return }
 
@@ -109,7 +122,7 @@ function Enable-WslFeaturesIfNeeded {
   $vmp = Get-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -ErrorAction SilentlyContinue
 
   if ($null -eq $wsl -or $null -eq $vmp) {
-    Write-Warning "Could not query Windows optional features (possibly not Windows 10/11). Skipping WSL enable."
+    Write-Step "Could not query Windows optional features. Skipping WSL feature enable."
     return
   }
 
@@ -125,79 +138,63 @@ function Enable-WslFeaturesIfNeeded {
     $script:NeedsRestart = $true
   }
 
+  # best effort; don't fail extension
   try {
-    Write-Step "Setting WSL2 as default version..."
+    Write-Step "Setting WSL2 as default version (best-effort)..."
     wsl --set-default-version 2 | Out-Host
   } catch {
-    Write-Warning "Could not set WSL2 default yet (often requires reboot)."
+    Write-Step "WSL default version could not be set yet (often requires reboot)."
     $script:NeedsRestart = $true
   }
 }
 
-function Ensure-DockerDesktopService {
-  $svcName = "com.docker.service"
-  $svc = Get-Service -Name $svcName -ErrorAction SilentlyContinue
-  if (-not $svc) {
-    Write-Warning "Docker Desktop service '$svcName' not found yet. This may require reboot / first login."
-    $script:NeedsRestart = $true
-    return
-  }
-
-  if ($svc.Status -ne "Running") {
-    Write-Step "Starting Docker Desktop service ($svcName)..."
-    try {
-      Start-Service -Name $svcName
-      Start-Sleep -Seconds 5
-    } catch {
-      Write-Warning "Could not start Docker Desktop service. Likely needs reboot / first user session."
-      $script:NeedsRestart = $true
-      return
-    }
-  }
-
-  try {
-    docker version | Out-Host
-  } catch {
-    Write-Warning "Docker daemon not reachable yet. Likely needs reboot / WSL initialization."
-    $script:NeedsRestart = $true
-  }
+# -----------------------------
+# IMPORTANT FIX: Do NOT validate docker daemon during extension run
+# It often isn't ready under SYSTEM and causes extension failure.
+# -----------------------------
+function Note-DockerDesktopInstalled {
+  Write-Step "Docker Desktop installed. Skipping docker daemon validation during extension run."
+  $script:NeedsRestart = $true
 }
 
+# -----------------------------
+# Scheduled Task creation for WSL tooling (runs as USER)
+# -----------------------------
 function Register-WslToolingScheduledTask {
   if (-not $NeedsWslTools) { return }
 
   if ([string]::IsNullOrWhiteSpace($RunAsUser) -or [string]::IsNullOrWhiteSpace($RunAsPassword)) {
-    Write-Warning "WSL tooling requested, but RunAsUser/RunAsPassword not provided. Skipping scheduled task creation."
+    Write-Step "WSL tooling requested, but RunAsUser/RunAsPassword not provided. Skipping scheduled task creation."
     return
   }
 
-  # Write the script that the scheduled task will run AS THE USER
-  # It installs Ubuntu, then installs docker.io, kubectl, helm (binary), minikube, starts minikube.
+  Write-Step "Writing scheduled-task script to: $WslTaskScript"
+
   @"
-`$ErrorActionPreference = 'Stop'
+`$ErrorActionPreference = 'Continue'
 `$ProgressPreference = 'SilentlyContinue'
 
-Write-Output "=== WSL scheduled task started at: `$(Get-Date) ==="
-Write-Output "Running as: `$(whoami)"
+New-Item -ItemType Directory -Force -Path `"$LogsDir`" | Out-Null
+"=== WSL scheduled task started: `$(Get-Date -Format o) ===" | Out-File -FilePath `"$WslTaskLog`" -Append -Encoding utf8
+"Running as: `$(whoami)" | Out-File -FilePath `"$WslTaskLog`" -Append -Encoding utf8
 
-# 1) Install Ubuntu distro (user context)
 try {
+  "Ensuring Ubuntu is installed..." | Out-File -FilePath `"$WslTaskLog`" -Append
   wsl --install -d Ubuntu | Out-Host
 } catch {
-  # If Ubuntu is already installed, this may throw or return non-zero; ignore.
-  Write-Warning "wsl --install returned non-zero (often means already installed). Continuing..."
+  "wsl --install returned non-zero (often means already installed). Continuing..." | Out-File -FilePath `"$WslTaskLog`" -Append
 }
 
-Start-Sleep -Seconds 10
+Start-Sleep -Seconds 15
 
-# 2) Verify Ubuntu exists for this user
+# Verify Ubuntu exists for this user
 `$distros = (wsl -l -q) 2>`$null
 if (-not (`$distros | Select-String -SimpleMatch "Ubuntu")) {
-  Write-Warning "Ubuntu distro not detected for this user yet. Exiting without marking phase2."
+  "Ubuntu distro not detected for this user yet. Exiting." | Out-File -FilePath `"$WslTaskLog`" -Append
   exit 0
 }
 
-# 3) Run Linux installs inside Ubuntu
+# Run Linux installs inside Ubuntu
 `$bash = @'
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
@@ -206,21 +203,16 @@ echo "=== Ubuntu WSL tooling started: $(date) ==="
 
 sudo apt-get update -y
 
-# docker.io (Ubuntu package)
+# docker.io (Ubuntu)
 if ! command -v docker >/dev/null 2>&1; then
   sudo apt-get install -y docker.io
-  sudo systemctl enable docker || true
-  sudo systemctl start docker || true
 fi
 
-# kubectl (repo)
+# kubectl
 if ! command -v kubectl >/dev/null 2>&1; then
   sudo install -d -m 0755 /etc/apt/keyrings
-  curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key \
-    | gpg --dearmor \
-    | sudo tee /etc/apt/keyrings/kubernetes-apt-keyring.gpg > /dev/null
-  echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /" \
-    | sudo tee /etc/apt/sources.list.d/kubernetes.list > /dev/null
+  curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key | gpg --dearmor | sudo tee /etc/apt/keyrings/kubernetes-apt-keyring.gpg > /dev/null
+  echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list > /dev/null
   sudo apt-get update -y
   sudo apt-get install -y kubectl
 fi
@@ -241,27 +233,25 @@ if ! command -v minikube >/dev/null 2>&1; then
   sudo chmod +x /usr/local/bin/minikube
 fi
 
-# start minikube
+# start minikube (docker driver)
 minikube delete || true
-minikube start --driver=docker || true
+minikube start --driver=docker --force || true
 minikube status || true
 
 echo "=== Ubuntu WSL tooling completed: $(date) ==="
 '@
 
-wsl -d Ubuntu -- bash -lc "`$bash"
+# IMPORTANT: pass as ONE argument safely
+wsl -d Ubuntu -- bash -lc "`"$bash`""
 
+"=== WSL scheduled task completed: `$(Get-Date -Format o) ===" | Out-File -FilePath `"$WslTaskLog`" -Append -Encoding utf8
 "@ | Set-Content -Path $WslTaskScript -Encoding UTF8
 
-  # Calculate start time 15 minutes from now in HH:mm (schtasks uses local time)
   $startTime = (Get-Date).AddMinutes(15).ToString("HH:mm")
-
   Write-Step "Creating scheduled task '$WslTaskName' to run at $startTime as user '$RunAsUser'..."
 
-  # Delete existing if present
   schtasks /Delete /TN $WslTaskName /F 2>$null | Out-Null
 
-  # Create one-time task (runs once)
   schtasks /Create /TN $WslTaskName `
     /TR "powershell -NoProfile -ExecutionPolicy Bypass -File `"$WslTaskScript`"" `
     /SC ONCE /ST $startTime /RL HIGHEST /RU $RunAsUser /RP $RunAsPassword /F | Out-Host
@@ -269,22 +259,22 @@ wsl -d Ubuntu -- bash -lc "`$bash"
   Write-Step "Scheduled task created. It will run WSL installs as the user in ~15 minutes."
 }
 
+# -----------------------------
+# Main
+# -----------------------------
 try {
   Ensure-Chocolatey
   choco feature enable -n allowGlobalConfirmation | Out-Host
-
   Write-Step "Starting tool installations..."
 
-  # Enable WSL features early (no reboot yet)
   Enable-WslFeaturesIfNeeded
 
-  # Original tools
+  # Tools
   if ($VsCode) { Install-ChocoPackage "vscode" }
   if ($AzCli)  { Install-ChocoPackage "azure-cli" }
   if ($DotNet) { Install-ChocoPackage "dotnet-sdk" }
   if ($NodeJs) { Install-ChocoPackage "nodejs-lts" }
 
-  # DevOps workshop essentials
   if ($Git)       { Install-ChocoPackage "git" }
   if ($Python)    { Install-ChocoPackage "python" }
   if ($Terraform) { Install-ChocoPackage "terraform" }
@@ -295,29 +285,29 @@ try {
   if ($Make)      { Install-ChocoPackage "make" }
   if ($Bicep)     { Install-ChocoPackage "bicep" }
 
-  # Docker options
+  # Docker
   if ($DockerDesktop) {
     Install-ChocoPackage "docker-desktop"
-    $NeedsRestart = $true
-    Ensure-DockerDesktopService
+    Note-DockerDesktopInstalled
   }
-  if ($DockerEngine)  { Install-ChocoPackage "docker-engine" }
+  if ($DockerEngine) {
+    Install-ChocoPackage "docker-engine"
+    # No daemon checks here either (service setup differs)
+    $NeedsRestart = $true
+  }
 
-  # Minikube on Windows: install binary, but DO NOT start (docker driver unsupported on windows/amd64)
+  # Minikube on Windows: install only (starting happens in WSL task)
   if ($Minikube) {
     Install-ChocoPackage "minikube"
     Write-Step "Minikube installed on Windows. It will be started inside WSL by the scheduled task."
   }
 
-  # Create scheduled task at the end (enough time for reboot)
   if ($NeedsWslTools) {
     Register-WslToolingScheduledTask
-    $NeedsRestart = $true  # WSL feature enable typically requires restart anyway
+    $NeedsRestart = $true
   }
 
-  # Mark phase 1 done
   New-Item -ItemType File -Path $Phase1Marker -Force | Out-Null
-
   Write-Step "All done."
 
   if ($NeedsRestart) {
@@ -326,9 +316,9 @@ try {
   }
 }
 catch {
-  Write-Error "Installation failed: $($_.Exception.Message)"
+  Write-Step "FATAL: Installation failed: $($_.Exception.Message)"
   throw
 }
 finally {
-  Stop-Transcript
+  try { Stop-Transcript | Out-Null } catch {}
 }
