@@ -25,6 +25,7 @@ BICEP="${12:-false}"
 MAKE="${13:-false}"
 DOCKER="${14:-false}"
 MINIKUBE="${15:-false}"
+RUN_USER="${SUDO_USER:-${USER:-$(id -un 2>/dev/null || echo "")}}"
 
 as_bool () {
   [[ "${1}" == "true" ]]
@@ -196,31 +197,29 @@ install_make () {
 install_docker () {
   echo "Installing Docker Engine..."
   ensure_prereqs
-  sudo install -d -m 0755 /etc/apt/keyrings
-
-  curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
-    | gpg --dearmor \
-    | sudo tee /etc/apt/keyrings/docker.gpg > /dev/null
-
-  echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
-    | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-
   apt_update
   install_pkg docker.io
 
   # Add current user to docker group (takes effect next login)
-  if id -nG "$USER" | grep -qw docker; then
-    echo "User already in docker group: $USER"
+  if [ -n "$RUN_USER" ]; then
+    if id -nG "$RUN_USER" | grep -qw docker; then
+        echo "User already in docker group: $RUN_USER"
+    else
+        sudo usermod -aG docker "$RUN_USER" || true
+        echo "Added $RUN_USER to docker group (log out/in to take effect)."
+    fi
   else
-    sudo usermod -aG docker "$USER" || true
-    echo "Added $USER to docker group (log out/in to take effect)."
+    echo "Could not determine user for docker group update; skipping usermod."
   fi
+
 }
 
 install_minikube () {
   echo "Installing Minikube..."
-  curl -LO https://github.com/kubernetes/minikube/releases/latest/download/minikube-linux-amd64
-  sudo install minikube-linux-amd64 /usr/local/bin/minikube && rm minikube-linux-amd64
+  curl -fsSL -o /tmp/minikube-linux-amd64 \
+    https://github.com/kubernetes/minikube/releases/latest/download/minikube-linux-amd64
+  sudo install /tmp/minikube-linux-amd64 /usr/local/bin/minikube
+  rm -f /tmp/minikube-linux-amd64
   echo "Minikube installed."
   echo "Starting Minikube with Docker driver..."
   minikube start --driver=docker || true
