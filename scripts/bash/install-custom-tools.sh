@@ -223,15 +223,10 @@ install_minikube () {
   sudo install /tmp/minikube-linux-amd64 /usr/local/bin/minikube
   rm -f /tmp/minikube-linux-amd64
   echo "Minikube installed."
-
-#   if [[ -z "${LOCAL_USER}" ]]; then
-#     echo "LOCAL_USER not provided; skipping minikube start."
-#     return 0
-#   fi
-
   echo "Adding ${LOCAL_USER} to docker group..."
   sudo usermod -aG docker "tuser" || true
   newgrp docker
+  sudo chown -R "tuser" ~/.minikube && chmod -R u+wrx ~/.minikube
   echo "Starting Minikube with Docker driver as ${LOCAL_USER}..."
   sudo -u "tuser" -E minikube start --driver=docker || true
 }
