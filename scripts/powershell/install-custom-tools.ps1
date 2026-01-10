@@ -202,7 +202,7 @@ if (-not (`$distros | Select-String -SimpleMatch "Ubuntu")) {
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
-echo "=== Ubuntu WSL tooling started: $(date -Is) ==="
+echo "=== Ubuntu WSL tooling started: $(date) ==="
 
 sudo apt-get update -y
 
@@ -246,7 +246,7 @@ minikube delete || true
 minikube start --driver=docker || true
 minikube status || true
 
-echo "=== Ubuntu WSL tooling completed: $(date -Is) ==="
+echo "=== Ubuntu WSL tooling completed: $(date) ==="
 '@
 
 wsl -d Ubuntu -- bash -lc "`$bash"
