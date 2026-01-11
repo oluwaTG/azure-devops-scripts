@@ -339,8 +339,8 @@ wsl -d ubuntu -- bash -lc "chmod +x `$bashWsl && `$bashWsl" 2>&1 |
 Log "=== WSL scheduled task completed ==="
 "@ | Set-Content -Path $WslTaskScript -Encoding utf8
 
-  # 3) Create the scheduled task (15 mins) — robust /TR quoting
-  $startTime = (Get-Date).AddMinutes(5).ToString("HH:mm")
+  # 3) Create the scheduled task (10 mins) — robust /TR quoting
+  $startTime = (Get-Date).AddMinutes(10).ToString("HH:mm")
   $psExe = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
 
   Write-Step "Creating scheduled task '$WslTaskName' to run at $startTime as user '$RunAsUser'..."
