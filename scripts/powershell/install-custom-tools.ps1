@@ -215,7 +215,6 @@ fi
 export USER="traininguser"
 sudo useradd -m -s /bin/bash $USER && echo "$USER:$USER" | sudo chpasswd
 sudo usermod -aG docker $USER || true
-newgrp docker
 minikube delete || true
 minikube start --driver=docker --force || true
 minikube status || true
