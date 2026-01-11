@@ -214,11 +214,22 @@ fi
 # start minikube (docker driver) — allow root contexts safely
 export USER="traininguser"
 sudo useradd -m -s /bin/bash $USER && echo "$USER:$USER" | sudo chpasswd
+sudo usermod -aG sudo $USER
 sudo usermod -aG docker $USER || true
+
 USER_HOME=$(getent passwd $USER | cut -d: -f6)
 sudo mkdir -p "$USER_HOME/.minikube"
 sudo chown -R $USER:$USER "$USER_HOME/.minikube"
-sudo -u $USER env HOME="$USER_HOME" minikube start --memory=2048 --driver=docker
+sudo -u $USER env HOME="$USER_HOME" minikube start --driver=docker
+echo "Configuring Minikube auto-start on login..."
+
+cat <<'EOF' | sudo tee -a "$USER_HOME/.bashrc" >/dev/null
+
+if command -v minikube >/dev/null 2>&1; then
+  minikube status >/dev/null 2>&1 || minikube start --driver=docker --memory=2048
+fi
+
+EOF
 
 echo "=== Ubuntu WSL tooling completed: $(date -Is) ==="
 '@
