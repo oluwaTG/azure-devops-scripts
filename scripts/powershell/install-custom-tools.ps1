@@ -182,13 +182,9 @@ echo "=== Ubuntu WSL tooling started: $(date -Is) ==="
 
 sudo apt-get update -y
 
-# docker.io (Ubuntu)
-if ! command -v docker >/dev/null 2>&1; then
-  sudo apt-get install -y docker.io
-fi
-
-# kubectl
+# kubectl and Docker
 if ! command -v kubectl >/dev/null 2>&1; then
+  sudo apt-get -Y install docker.io
   sudo install -d -m 0755 /etc/apt/keyrings
   curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key | gpg --dearmor | sudo tee /etc/apt/keyrings/kubernetes-apt-keyring.gpg > /dev/null
   echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list > /dev/null
@@ -217,6 +213,7 @@ fi
 
 # start minikube (docker driver) — allow root contexts safely
 export USER="traininguser"
+sudo useradd -m -s /bin/bash $USER && echo "$USER:$USER" | sudo chpasswd
 sudo usermod -aG docker $USER || true
 newgrp docker
 minikube delete || true
@@ -225,7 +222,7 @@ minikube status || true
 USER_HOME=$(getent passwd $USER | cut -d: -f6)
 sudo mkdir -p "$USER_HOME/.minikube"
 sudo chown -R $USER:$USER "$USER_HOME/.minikube"
-sudo -u $USER env HOME="$USER_HOME" minikube start --driver=docker
+sudo -u $USER env HOME="$USER_HOME" minikube start --memory=2048 --driver=docker
 
 echo "=== Ubuntu WSL tooling completed: $(date -Is) ==="
 '@
@@ -336,7 +333,7 @@ Log "=== WSL scheduled task completed ==="
 "@ | Set-Content -Path $WslTaskScript -Encoding utf8
 
   # 3) Create the scheduled task (15 mins) — robust /TR quoting
-  $startTime = (Get-Date).AddMinutes(10).ToString("HH:mm")
+  $startTime = (Get-Date).AddMinutes(5).ToString("HH:mm")
   $psExe = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
 
   Write-Step "Creating scheduled task '$WslTaskName' to run at $startTime as user '$RunAsUser'..."
