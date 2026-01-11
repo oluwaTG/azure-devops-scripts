@@ -184,7 +184,7 @@ sudo apt-get update -y
 
 # kubectl and Docker
 if ! command -v kubectl >/dev/null 2>&1; then
-  sudo apt-get -Y install docker.io
+  sudo apt-get -y install docker.io
   sudo install -d -m 0755 /etc/apt/keyrings
   curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key | gpg --dearmor | sudo tee /etc/apt/keyrings/kubernetes-apt-keyring.gpg > /dev/null
   echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /" | sudo tee /etc/apt/sources.list.d/kubernetes.list > /dev/null
