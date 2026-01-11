@@ -208,14 +208,24 @@ fi
 
 # minikube (binary)
 if ! command -v minikube >/dev/null 2>&1; then
-  sudo curl -fsSL -o /usr/local/bin/minikube https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
-  sudo chmod +x /usr/local/bin/minikube
+  sudo curl -fsSL -o /tmp/minikube-linux-amd64 \
+    https://github.com/kubernetes/minikube/releases/latest/download/minikube-linux-amd64
+  sudo install /tmp/minikube-linux-amd64 /usr/local/bin/minikube
+  rm -f /tmp/minikube-linux-amd64
+  echo "Minikube installed."
 fi
 
 # start minikube (docker driver) — allow root contexts safely
+export USER="traininguser"
+sudo usermod -aG docker $USER || true
+newgrp docker
 minikube delete || true
 minikube start --driver=docker --force || true
 minikube status || true
+USER_HOME=$(getent passwd $USER | cut -d: -f6)
+sudo mkdir -p "$USER_HOME/.minikube"
+sudo chown -R $USER:$USER "$USER_HOME/.minikube"
+sudo -u $USER env HOME="$USER_HOME" minikube start --driver=docker
 
 echo "=== Ubuntu WSL tooling completed: $(date -Is) ==="
 '@
@@ -236,12 +246,20 @@ function Log([string]`$m) {
   (`"[{0}] {1}`" -f (Get-Date -Format o), `$m) |
     Out-File -FilePath `"$WslTaskLog`" -Append -Encoding utf8
 }
-
 New-Item -ItemType Directory -Force -Path `"$LogsDir`" | Out-Null
 Log "=== WSL scheduled task started ==="
 Log ("Running as: {0}" -f (whoami))
 
 Log ("Installing distro '{0}' (no-launch)..." -f "ubuntu")
+Write-Host "Starting WSL update..."
+`$updateProcess = wsl --update
+# Wait until update completes
+if ($updateProcess.ExitCode -eq 0) {
+    Write-Host "WSL update completed successfully."
+} else {
+    Write-Host "WSL update failed with exit code $($updateProcess.ExitCode)."
+    throw "Cannot continue without successful WSL update."
+}
 # Install Ubuntu without launching
 try {
     `$wslOutput = wsl --install Ubuntu --no-launch 2>&1
@@ -309,7 +327,7 @@ Set-Content -Path `$bashWin -Value `$bashText -Encoding utf8
 # WSL-visible path
 `$bashWsl = "/mnt/c/ProgramData/DevOpsSetup/wsl-tools.sh"
 
-Log ("Executing WSL bash installer in distro '{0}': {1}" -f ubuntu, `$bashWsl)
+Log ("Executing WSL bash installer in distro '{0}': {1}" -f "ubuntu", `$bashWsl)
 
 wsl -d ubuntu -- bash -lc "chmod +x `$bashWsl && `$bashWsl" 2>&1 |
   ForEach-Object { Log ("wsl-run: " + `$_) }
