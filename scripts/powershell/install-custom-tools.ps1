@@ -215,9 +215,6 @@ fi
 export USER="traininguser"
 sudo useradd -m -s /bin/bash $USER && echo "$USER:$USER" | sudo chpasswd
 sudo usermod -aG docker $USER || true
-minikube delete || true
-minikube start --driver=docker --force || true
-minikube status || true
 USER_HOME=$(getent passwd $USER | cut -d: -f6)
 sudo mkdir -p "$USER_HOME/.minikube"
 sudo chown -R $USER:$USER "$USER_HOME/.minikube"
