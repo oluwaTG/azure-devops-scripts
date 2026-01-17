@@ -3,6 +3,12 @@ kube-prometheus-stack:
     enabled: true
     service:
       type: ClusterIP
+    image:
+      repository: grafana/grafana
+      tag: 10.4.1
+    grafana.ini:
+      plugins:
+        allow_loading_unsigned_plugins: yesoreyeram-infinity-datasource
 
   prometheus:
     prometheusSpec:
@@ -14,6 +20,4 @@ kube-prometheus-stack:
   alertmanager:
     enabled: true
 
-image:
-  repository: grafana/grafana
-  tag: 10.4.1
+
