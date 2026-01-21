@@ -1,0 +1,59 @@
+replicaCount: 1
+
+image:
+  repository: docker.io/elumole22/devops-helper
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8000
+
+prometheus:
+  enabled: true
+  scrapePath: /metrics
+  scrapePort: "8000"
+
+env:
+  DATABASE_URL: ""
+
+resources: {}
+
+labels:
+  app: devops-helper
+
+hpa:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 2
+  targetCPUUtilizationPercentage: 70
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 200Mi
+
+externalSecrets:
+  enabled: true
+  clusterSecretStore:
+    name: github-cluster-secret-store
+  github:
+    owner: oluwaTG
+    repo: movies-app
+  secret:
+    name: movies-db-secret
+    refreshInterval: 1h
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations: {}
+  hosts: []
+  tls: []
+
+previewIngress:
+  enabled: false

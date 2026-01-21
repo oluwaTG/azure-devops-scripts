@@ -1,0 +1,3 @@
+﻿<Project>
+  <Import Project="../buildMultiTargeting/DevOpsHelper.Api.props" />
+</Project>

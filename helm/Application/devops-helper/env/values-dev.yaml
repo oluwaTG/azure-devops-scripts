@@ -1,0 +1,20 @@
+image:
+  tag: "latest"
+
+rollout:
+  enabled: false
+
+hpa:
+  enabled: true
+
+ingress:
+  enabled: true
+  hosts:
+    - host: devops-helper.local
+      paths:
+        - path: /
+          pathType: Prefix
+  service:
+    name: devops-helper
+    port: 80
+
