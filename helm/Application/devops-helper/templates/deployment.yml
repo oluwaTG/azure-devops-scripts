@@ -4,12 +4,12 @@ kind: Deployment
 metadata:
   name: {{ .Release.Name }}
   labels:
-{{ toYaml .Values.labels | indent 4 }}
+{{ toYaml .Values.labels | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-{{ toYaml .Values.labels | indent 6 }}
+{{ toYaml .Values.labels | nindent 6 }}
   template:
     metadata:
       labels:
@@ -27,9 +27,6 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - containerPort: {{ .Values.service.targetPort }}
-          # envFrom:
-          #   - secretRef:
-          #       name: movies-db-secret
           resources:
-{{ toYaml .Values.resources | indent 12 }}
+{{ toYaml .Values.resources | nindent 12 }}
 {{- end }}
