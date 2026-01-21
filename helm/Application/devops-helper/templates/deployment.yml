@@ -21,27 +21,15 @@ spec:
         prometheus.io/port: "{{ .Values.prometheus.scrapePort }}"
       {{- end }}
     spec:
-
-      {{- if .Values.dbSeed.enabled }}
-      initContainers:
-        - name: db-seed
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["python", "app/seed.py"]
-          envFrom:
-            - secretRef:
-                name: movies-db-secret
-      {{- end }}
-
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - containerPort: {{ .Values.service.targetPort }}
-          envFrom:
-            - secretRef:
-                name: movies-db-secret
+          # envFrom:
+          #   - secretRef:
+          #       name: movies-db-secret
           resources:
 {{ toYaml .Values.resources | indent 12 }}
 {{- end }}

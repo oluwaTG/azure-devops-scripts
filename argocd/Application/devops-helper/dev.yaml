@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: movies-dev
+  name: devops-helper
   namespace: argocd
 spec:
   project: default
@@ -9,7 +9,7 @@ spec:
   source:
     repoURL: https://github.com/oluwaTG/azure-devops-scripts.git
     targetRevision: main
-    path: helm/Application/movies-app
+    path: helm/Application/devops-helper
     helm:
       valueFiles:
         - values.yaml

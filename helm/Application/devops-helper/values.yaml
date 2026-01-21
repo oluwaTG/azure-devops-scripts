@@ -37,17 +37,6 @@ resources:
     cpu: 200m
     memory: 200Mi
 
-externalSecrets:
-  enabled: true
-  clusterSecretStore:
-    name: github-cluster-secret-store
-  github:
-    owner: oluwaTG
-    repo: movies-app
-  secret:
-    name: movies-db-secret
-    refreshInterval: 1h
-
 ingress:
   enabled: true
   className: nginx
