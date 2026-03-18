@@ -1,0 +1,10 @@
+# Ignore local VS Code extension skeleton
+terragrunt-vscode/
+
+# Node outputs
+node_modules/
+out/
+
+# Editor
+.vscode/
+.DS_Store

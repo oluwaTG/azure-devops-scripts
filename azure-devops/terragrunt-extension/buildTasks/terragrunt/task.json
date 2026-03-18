@@ -1,0 +1,61 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/azure-devops/v2/task.json",
+  "id": "d9b0f4a8-0000-4000-8000-000000000001",
+  "name": "Terragrunt",
+  "friendlyName": "Terragrunt",
+  "description": "Run Terragrunt commands (install option + arbitrary terragrunt subcommands).",
+  "author": "Your Name",
+  "helpMarkDown": "Run terragrunt commands on the agent.",
+  "category": "Build",
+  "visibility": ["Build", "Release"],
+  "version": {
+    "Major": 0,
+    "Minor": 0,
+    "Patch": 1
+  },
+  "instanceNameFormat": "Terragrunt: $[command]",
+  "execution": {
+    "Node": {
+      "target": "task.js",
+      "argumentFormats": ["node", "none"]
+    },
+    "Bash": {
+      "target": "task.sh",
+      "argumentFormats": ["\"$(command)\"","\"$(extraArgs)\"","\"$(workingDirectory)\"","\"$(install)\""]
+    }
+  },
+  "inputs": [
+    {
+      "name": "install",
+      "type": "boolean",
+      "label": "Install Terragrunt if missing",
+      "defaultValue": "false",
+      "required": false,
+      "helpMarkDown": "If enabled, the task will attempt to download and install terragrunt on the agent before running the command."
+    },
+    {
+      "name": "command",
+      "type": "string",
+      "label": "Terragrunt command",
+      "defaultValue": "apply",
+      "required": true,
+      "helpMarkDown": "Terragrunt subcommand to run (e.g. init, plan, apply, destroy, run-all, output)."
+    },
+    {
+      "name": "extraArgs",
+      "type": "string",
+      "label": "Additional arguments",
+      "defaultValue": "",
+      "required": false,
+      "helpMarkDown": "Extra arguments passed to terragrunt (e.g. -var 'x=1' -lock=false)."
+    },
+    {
+      "name": "workingDirectory",
+      "type": "filePath",
+      "label": "Working directory",
+      "defaultValue": "",
+      "required": false,
+      "helpMarkDown": "Working directory to run terragrunt in (defaults to repo root)."
+    }
+  ]
+}

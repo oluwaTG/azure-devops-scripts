@@ -224,14 +224,26 @@ install_minikube () {
   rm -f /tmp/minikube-linux-amd64
   echo "Minikube installed."
   echo "Adding ${LOCAL_USER} to docker group..."
-  sudo usermod -aG docker "tuser" || true
-  newgrp docker
-#   sudo chown -R "tuser" $HOME/.minikube && chmod -R u+wrx $HOME/.minikube
-  echo "Starting Minikube with Docker driver as ${LOCAL_USER}..."
-  USER_HOME=$(getent passwd tuser | cut -d: -f6)
+  # Determine the actual user to run minikube as (LOCAL_USER if provided, else inferred RUN_USER)
+  TARGET_USER="${LOCAL_USER:-$RUN_USER}"
+  if [ -z "$TARGET_USER" ]; then
+    echo "No target user found to run minikube; aborting minikube start."
+    return 0
+  fi
+
+  sudo usermod -aG docker "$TARGET_USER" || true
+  # Apply group change in current shell where appropriate
+  newgrp docker || true
+
+  echo "Starting Minikube with Docker driver as ${TARGET_USER}..."
+  USER_HOME=$(getent passwd "$TARGET_USER" | cut -d: -f6)
+  if [ -z "$USER_HOME" ]; then
+    USER_HOME="/home/${TARGET_USER}"
+  fi
+
   sudo mkdir -p "$USER_HOME/.minikube"
-  sudo chown -R tuser:tuser "$USER_HOME/.minikube"
-  sudo -u tuser env HOME="$USER_HOME" minikube start --driver=docker
+  sudo chown -R "$TARGET_USER":"$TARGET_USER" "$USER_HOME/.minikube"
+  sudo -u "$TARGET_USER" env HOME="$USER_HOME" minikube start --driver=docker || true
 }
 
 # ---- Execution ----
