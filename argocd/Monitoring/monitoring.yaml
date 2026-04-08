@@ -1,27 +1,27 @@
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: monitoring
-  namespace: argocd
-spec:
-  project: default
+# apiVersion: argoproj.io/v1alpha1
+# kind: Application
+# metadata:
+#   name: monitoring
+#   namespace: argocd
+# spec:
+#   project: default
 
-  source:
-    repoURL: https://github.com/oluwaTG/azure-devops-scripts.git
-    targetRevision: main
-    path: helm/monitoring
-    helm:
-      skipCrds: false
-      valueFiles:
-        - values.yaml
+#   source:
+#     repoURL: https://github.com/oluwaTG/azure-devops-scripts.git
+#     targetRevision: main
+#     path: helm/monitoring
+#     helm:
+#       skipCrds: false
+#       valueFiles:
+#         - values.yaml
 
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: monitoring
+#   destination:
+#     server: https://kubernetes.default.svc
+#     namespace: monitoring
 
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-    syncOptions:
-      - CreateNamespace=true
+#   syncPolicy:
+#     automated:
+#       prune: true
+#       selfHeal: true
+#     syncOptions:
+#       - CreateNamespace=true
