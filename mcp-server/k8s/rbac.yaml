@@ -2,22 +2,86 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: mcp-server-sa
-  namespace: default
+  namespace: mcp-server-dev
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: mcp-server-readonly
 rules:
+  # Core resources
   - apiGroups: [""]
-    resources: ["pods","services","endpoints","nodes","events","namespaces"]
-    verbs: ["get","list","watch"]
+    resources:
+      - pods
+      - pods/log
+      - services
+      - endpoints
+      - nodes
+      - events
+      - namespaces
+      - configmaps
+      - serviceaccounts
+      - persistentvolumes
+      - persistentvolumeclaims
+    verbs: ["get", "list", "watch"]
+
+  # Secrets — list/get only (values should be redacted in app code)
+  - apiGroups: [""]
+    resources:
+      - secrets
+    verbs: ["get", "list", "watch"]
+
+  # Workloads
   - apiGroups: ["apps"]
-    resources: ["deployments","daemonsets","statefulsets","replicasets"]
-    verbs: ["get","list","watch"]
+    resources:
+      - deployments
+      - daemonsets
+      - statefulsets
+      - replicasets
+    verbs: ["get", "list", "watch"]
+
+  # Batch
   - apiGroups: ["batch"]
-    resources: ["jobs","cronjobs"]
-    verbs: ["get","list","watch"]
+    resources:
+      - jobs
+      - cronjobs
+    verbs: ["get", "list", "watch"]
+
+  # Networking
+  - apiGroups: ["networking.k8s.io"]
+    resources:
+      - ingresses
+      - ingressclasses
+      - networkpolicies
+    verbs: ["get", "list", "watch"]
+
+  # RBAC (read-only — so the chatbot can explain permissions)
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources:
+      - roles
+      - rolebindings
+      - clusterroles
+      - clusterrolebindings
+    verbs: ["get", "list", "watch"]
+
+  # Storage
+  - apiGroups: ["storage.k8s.io"]
+    resources:
+      - storageclasses
+      - volumeattachments
+    verbs: ["get", "list", "watch"]
+
+  # Autoscaling
+  - apiGroups: ["autoscaling"]
+    resources:
+      - horizontalpodautoscalers
+    verbs: ["get", "list", "watch"]
+
+  # Policy
+  - apiGroups: ["policy"]
+    resources:
+      - poddisruptionbudgets
+    verbs: ["get", "list", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -30,4 +94,4 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: mcp-server-sa
-    namespace: default
+    namespace: mcp-server-dev
