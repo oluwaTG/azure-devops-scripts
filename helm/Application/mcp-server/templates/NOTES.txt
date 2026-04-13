@@ -1,0 +1,38 @@
+MCP Server {{ .Chart.AppVersion }} has been deployed successfully!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Release  : {{ .Release.Name }}
+  Namespace: {{ .Release.Namespace }}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+{{- if .Values.ingress.enabled }}
+Dashboard URL:
+{{- range .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}
+{{- end }}
+{{- else }}
+Access the dashboard via port-forward:
+
+  kubectl port-forward -n {{ .Release.Namespace }} \
+    svc/{{ include "mcp-server.fullname" . }} 8080:{{ .Values.service.port }}
+
+Then open:  http://localhost:8080
+{{- end }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Key API endpoints:
+  GET /              → SPA dashboard
+  GET /health        → health probe
+  GET /namespaces    → list all namespaces
+  GET /nodes         → cluster nodes
+  GET /pods          → pods (all namespaces)
+  GET /namespaces/{ns}/pods/{pod}/logs  → pod logs
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+To verify the deployment:
+
+  kubectl get pods -n {{ .Release.Namespace }} -l {{ include "mcp-server.selectorLabels" . | replace "\n" "," | replace ": " "=" }}
+
+For the full list of configurable values run:
+
+  helm show values <chart>

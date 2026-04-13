@@ -207,18 +207,63 @@ app.MapGet("/metrics/pods", async () =>
     return Results.Ok(allPods);
 });
 
-// ── Dashboard UI (served from ui/dashboard.html) ─────────────────────────────
+// Homepage — static HTML dashboard
 app.MapGet("/", async context =>
 {
-    var basePath = AppContext.BaseDirectory;
-    var htmlPath = Path.Combine(basePath, "ui", "dashboard.html");
-    if (!File.Exists(htmlPath))
+    var nodes = await WithK8sRetryAsync(c => c.ListNodeAsync());
+    var nsList = await WithK8sRetryAsync(c => c.ListNamespaceAsync());
+    var podCount = 0;
+    foreach (var ns in nsList.Items.Select(n => n.Metadata.Name))
     {
-        context.Response.StatusCode = 404;
-        await context.Response.WriteAsync("dashboard.html not found at: " + htmlPath);
-        return;
+        var pods = await WithK8sRetryAsync(c => c.ListNamespacedPodAsync(ns));
+        podCount += pods.Items.Count;
     }
-    var html = await File.ReadAllTextAsync(htmlPath);
+    var html = $@"<!DOCTYPE html>
+<html lang='en'>
+<head>
+    <meta charset='UTF-8'>
+    <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+    <title>MCP Server Dashboard</title>
+    <style>
+        body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #181c24; color: #f3f6fa; margin: 0; }}
+        .header {{ background: #232946; padding: 1.5rem 2rem; display: flex; align-items: center; justify-content: space-between; }}
+        .header h1 {{ margin: 0; font-size: 2rem; color: #f3f6fa; }}
+        .nav {{ display: flex; gap: 1.5rem; }}
+        .nav a {{ color: #eebf3f; text-decoration: none; font-weight: 500; }}
+        .nav a:hover {{ text-decoration: underline; }}
+        .main {{ max-width: 900px; margin: 2rem auto; background: #232946; border-radius: 12px; box-shadow: 0 2px 12px #0002; padding: 2rem; }}
+        .summary {{ display: flex; gap: 2rem; margin-bottom: 2rem; }}
+        .card {{ background: #2a2d3a; border-radius: 8px; padding: 1.5rem; flex: 1; text-align: center; }}
+        .card h2 {{ margin: 0 0 0.5rem 0; font-size: 2.2rem; color: #eebf3f; }}
+        .card p {{ margin: 0; color: #b8bccc; }}
+        .footer {{ text-align: center; color: #b8bccc; margin: 2rem 0 0 0; font-size: 0.95rem; }}
+    </style>
+</head>
+<body>
+    <div class='header'>
+        <h1>&#9096; MCP Server</h1>
+        <nav class='nav'>
+            <a href='/'>Dashboard</a>
+            <a href='/metrics/nodes'>Node Metrics</a>
+            <a href='/metrics/pods'>Pod Metrics</a>
+            <a href='/namespaces'>Namespaces</a>
+            <a href='/cluster/info'>Cluster Info</a>
+            <a href='https://github.com/oluwaTG/azure-devops-scripts' target='_blank'>GitHub</a>
+        </nav>
+    </div>
+    <div class='main'>
+        <div class='summary'>
+            <div class='card'><h2>{nodes.Items.Count}</h2><p>Nodes</p></div>
+            <div class='card'><h2>{nsList.Items.Count}</h2><p>Namespaces</p></div>
+            <div class='card'><h2>{podCount}</h2><p>Pods</p></div>
+        </div>
+        <h2 style='color:#eebf3f;'>Welcome to MCP Server</h2>
+        <p>This dashboard provides a unified view of your Kubernetes cluster(s). Use the navigation above to explore metrics, namespaces, and more.</p>
+        <p><b>Multi-cluster support and authentication coming soon.</b></p>
+    </div>
+    <div class='footer'>MCP Server &copy; 2026</div>
+</body>
+</html>";
     context.Response.ContentType = "text/html";
     await context.Response.WriteAsync(html);
 });

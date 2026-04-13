@@ -1,27 +1,142 @@
+# ------------------------------------------------------------------------------
+# General
+# ------------------------------------------------------------------------------
 replicaCount: 1
 
+# Override the chart name used in resource names / labels.
+# nameOverride replaces the chart name component only.
+# fullnameOverride replaces the entire computed name.
+nameOverride: ""
+fullnameOverride: ""
+
+# ------------------------------------------------------------------------------
+# Image
+# ------------------------------------------------------------------------------
 image:
   repository: elumole22/mcp-server
-  tag: latest
+  tag: "1.0.3"
   pullPolicy: IfNotPresent
 
+# List of pre-existing pull-secret names, e.g.:
+#   - name: my-registry-secret
+imagePullSecrets: []
+
+# ------------------------------------------------------------------------------
+# Service Account & RBAC
+# ------------------------------------------------------------------------------
+serviceAccount:
+  # Create a dedicated ServiceAccount for the pod.
+  create: true
+  # Annotations to add to the ServiceAccount (e.g. for IAM / Workload Identity).
+  annotations: {}
+  # Override the auto-generated ServiceAccount name.
+  # When empty the fullname helper is used.
+  name: ""
+
+rbac:
+  # Create the ClusterRole + ClusterRoleBinding that grant read-only k8s access.
+  create: true
+
+# ------------------------------------------------------------------------------
+# Pod metadata
+# ------------------------------------------------------------------------------
+podAnnotations: {}
+
+podLabels: {}
+
+# ------------------------------------------------------------------------------
+# Security contexts
+# ------------------------------------------------------------------------------
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# ------------------------------------------------------------------------------
+# Service
+# ------------------------------------------------------------------------------
 service:
   type: ClusterIP
   port: 8080
   targetPort: 8080
+  # Only used when type: NodePort
+  nodePort: ""
 
-resources: {}
-
-labels:
-  app: mcp-server
-
+# ------------------------------------------------------------------------------
+# Ingress
+# ------------------------------------------------------------------------------
 ingress:
   enabled: true
   className: nginx
   annotations: {}
+    # nginx.ingress.kubernetes.io/rewrite-target: /
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
   hosts:
     - host: mcp-server.local
       paths:
         - path: /
           pathType: Prefix
   tls: []
+  # - secretName: mcp-server-tls
+  #   hosts:
+  #     - mcp-server.example.com
+
+# ------------------------------------------------------------------------------
+# Resources
+# ------------------------------------------------------------------------------
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+# ------------------------------------------------------------------------------
+# Health probes
+# ------------------------------------------------------------------------------
+livenessProbe:
+  enabled: true
+  path: /health
+  initialDelaySeconds: 10
+  periodSeconds: 30
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: true
+  path: /health
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+# ------------------------------------------------------------------------------
+# Extra environment variables
+# Useful for overriding ASPNETCORE_URLS, ASPNETCORE_ENVIRONMENT, etc.
+# ------------------------------------------------------------------------------
+env: []
+# - name: ASPNETCORE_ENVIRONMENT
+#   value: Production
+# - name: MY_SECRET
+#   valueFrom:
+#     secretKeyRef:
+#       name: my-secret
+#       key: my-key
+
+# ------------------------------------------------------------------------------
+# Scheduling
+# ------------------------------------------------------------------------------
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

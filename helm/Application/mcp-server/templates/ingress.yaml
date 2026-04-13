@@ -2,12 +2,13 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ .Release.Name }}
+  name: {{ include "mcp-server.fullname" . }}
+  namespace: {{ .Release.Namespace }}
   labels:
-    {{- toYaml .Values.labels | nindent 4 }}
-  {{- if .Values.ingress.annotations }}
+    {{- include "mcp-server.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
   annotations:
-    {{- toYaml .Values.ingress.annotations | nindent 4 }}
+    {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
   {{- if .Values.ingress.className }}
@@ -15,7 +16,7 @@ spec:
   {{- end }}
   rules:
     {{- range .Values.ingress.hosts }}
-    - host: {{ .host }}
+    - host: {{ .host | quote }}
       http:
         paths:
           {{- range .paths }}
@@ -23,7 +24,7 @@ spec:
             pathType: {{ .pathType }}
             backend:
               service:
-                name: {{ $.Release.Name }}
+                name: {{ include "mcp-server.fullname" $ }}
                 port:
                   number: {{ $.Values.service.port }}
           {{- end }}

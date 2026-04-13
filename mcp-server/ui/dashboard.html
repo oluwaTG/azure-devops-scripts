@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>MCP · Kubernetes Dashboard</title>
+<style>
+  :root {
+    --bg:       #0f1117;
+    --surface:  #161b27;
+    --surface2: #1e2535;
+    --border:   #2a3147;
+    --accent:   #4f8ef7;
+    --accent2:  #38d9a9;
+    --warn:     #f7a94f;
+    --danger:   #f76f6f;
+    --text:     #e2e8f5;
+    --muted:    #7b879e;
+    --sidebar-w:220px;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;height:100vh;overflow:hidden}
+
+  /* ── Sidebar ── */
+  #sidebar{width:var(--sidebar-w);min-width:var(--sidebar-w);background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column}
+  #sidebar .logo{padding:1.25rem 1.2rem;display:flex;align-items:center;gap:.6rem;border-bottom:1px solid var(--border)}
+  #sidebar .logo span{font-size:1.1rem;font-weight:700;letter-spacing:.02em}
+  #sidebar nav{flex:1;overflow-y:auto;padding:.5rem 0}
+  #sidebar nav .section-label{padding:.6rem 1.2rem .25rem;font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+  #sidebar nav a{display:flex;align-items:center;gap:.6rem;padding:.55rem 1.2rem;color:var(--muted);text-decoration:none;font-size:.875rem;border-left:3px solid transparent;transition:all .15s;cursor:pointer}
+  #sidebar nav a:hover{color:var(--text);background:var(--surface2)}
+  #sidebar nav a.active{color:var(--accent);border-left-color:var(--accent);background:var(--surface2)}
+  #sidebar .ns-box{padding:.75rem 1rem;border-top:1px solid var(--border)}
+  #sidebar .ns-box label{font-size:.72rem;color:var(--muted);display:block;margin-bottom:.35rem;text-transform:uppercase;letter-spacing:.08em}
+  #sidebar select{width:100%;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:.4rem .6rem;font-size:.82rem;outline:none}
+  #sidebar select:focus{border-color:var(--accent)}
+
+  /* ── Main ── */
+  #main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+  #topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:.75rem 1.5rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-shrink:0}
+  #topbar h1{font-size:1rem;font-weight:600;color:var(--text)}
+  .pills{display:flex;gap:.5rem}
+  .pill{background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:.2rem .75rem;font-size:.78rem;color:var(--muted)}
+  .pill span{color:var(--text);font-weight:600}
+  #refresh-btn{background:none;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:.3rem .7rem;font-size:.8rem;cursor:pointer;transition:all .15s}
+  #refresh-btn:hover{border-color:var(--accent);color:var(--accent)}
+
+  #content{flex:1;overflow-y:auto;padding:1.5rem}
+
+  /* ── Stat cards ── */
+  .stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:1rem;margin-bottom:1.5rem}
+  .stat-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1.1rem 1.2rem}
+  .stat-card .label{font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:.4rem}
+  .stat-card .value{font-size:2rem;font-weight:700;line-height:1}
+  .stat-card .sub{font-size:.75rem;color:var(--muted);margin-top:.3rem}
+  .c-blue{color:var(--accent)}
+  .c-green{color:var(--accent2)}
+  .c-warn{color:var(--warn)}
+  .c-danger{color:var(--danger)}
+
+  /* ── Section ── */
+  .section{background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:1.25rem;overflow:hidden}
+  .section-head{display:flex;align-items:center;justify-content:space-between;padding:.75rem 1.1rem;border-bottom:1px solid var(--border);cursor:pointer;user-select:none}
+  .section-head h2{font-size:.9rem;font-weight:600;display:flex;align-items:center;gap:.5rem}
+  .section-head .badge{background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:.1rem .55rem;font-size:.72rem;color:var(--muted)}
+  .section-body{overflow:auto;max-height:400px}
+
+  /* ── Table ── */
+  table{width:100%;border-collapse:collapse;font-size:.82rem}
+  th{background:var(--surface2);color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-size:.7rem;padding:.55rem 1rem;text-align:left;position:sticky;top:0;z-index:1}
+  td{padding:.55rem 1rem;border-top:1px solid var(--border);vertical-align:middle}
+  tr:hover td{background:#ffffff06}
+  .tag{display:inline-block;padding:.1rem .45rem;border-radius:4px;font-size:.72rem;font-weight:600}
+  .tag-green{background:#38d9a920;color:var(--accent2)}
+  .tag-blue{background:#4f8ef720;color:var(--accent)}
+  .tag-warn{background:#f7a94f20;color:var(--warn)}
+  .tag-danger{background:#f76f6f20;color:var(--danger)}
+  .tag-muted{background:#7b879e20;color:var(--muted)}
+  .mono{font-family:'Cascadia Code','Fira Code',monospace;font-size:.78rem}
+
+  /* ── Log panel ── */
+  #log-panel{position:fixed;bottom:0;left:var(--sidebar-w);right:0;height:0;background:var(--surface);border-top:1px solid var(--border);transition:height .25s ease;display:flex;flex-direction:column;z-index:100}
+  #log-panel.open{height:45vh}
+  #log-head{display:flex;align-items:center;justify-content:space-between;padding:.5rem 1rem;border-bottom:1px solid var(--border);flex-shrink:0}
+  #log-head h3{font-size:.85rem;font-weight:600;color:var(--accent);font-family:monospace}
+  #log-close{background:none;border:none;color:var(--muted);font-size:1.1rem;cursor:pointer;padding:.2rem .5rem;border-radius:4px}
+  #log-close:hover{color:var(--danger)}
+  #log-toolbar{display:flex;align-items:center;gap:.75rem;padding:.4rem 1rem;border-bottom:1px solid var(--border);flex-shrink:0}
+  #log-search{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .7rem;font-size:.8rem;width:220px;outline:none}
+  #log-search:focus{border-color:var(--accent)}
+  #log-tail-select{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:.3rem .6rem;font-size:.8rem;outline:none}
+  #log-body{flex:1;overflow-y:auto;padding:.75rem 1rem;font-family:'Cascadia Code','Fira Code','Courier New',monospace;font-size:.78rem;line-height:1.6;white-space:pre-wrap;word-break:break-all}
+  .log-line{display:block}
+  .log-line.hl-error{color:var(--danger)}
+  .log-line.hl-warn{color:var(--warn)}
+  .log-line.hl-info{color:var(--accent2)}
+  .log-line.hl-match{background:#f7a94f22;border-radius:2px}
+
+  /* ── Node cards ── */
+  .node-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem;padding:1rem}
+  .node-card{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:1rem}
+  .node-card .node-name{font-weight:600;font-size:.9rem;margin-bottom:.5rem;display:flex;align-items:center;gap:.5rem}
+  .node-card .node-row{display:flex;justify-content:space-between;font-size:.78rem;padding:.15rem 0}
+  .node-card .node-row .nk{color:var(--muted)}
+  .node-card .node-row .nv{color:var(--text)}
+
+  /* ── Loader / empty ── */
+  .loader{text-align:center;padding:2rem;color:var(--muted);font-size:.85rem}
+  .loader::after{content:'';display:inline-block;width:16px;height:16px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;margin-left:.5rem;vertical-align:middle}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .empty{text-align:center;padding:2rem;color:var(--muted);font-size:.85rem}
+
+  /* scrollbar */
+  ::-webkit-scrollbar{width:6px;height:6px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+</style>
+</head>
+<body>
+
+<!-- ═══ Sidebar ═══ -->
+<aside id="sidebar">
+  <div class="logo">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+      <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="#4f8ef7" stroke-width="1.8" stroke-linejoin="round"/>
+      <path d="M2 17l10 5 10-5" stroke="#38d9a9" stroke-width="1.8" stroke-linejoin="round"/>
+      <path d="M2 12l10 5 10-5" stroke="#4f8ef7" stroke-width="1.8" stroke-linejoin="round"/>
+    </svg>
+    <span>MCP Server</span>
+  </div>
+  <nav id="sidebar-nav">
+    <span class="section-label">Cluster</span>
+    <a class="active" data-view="overview">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      Overview
+    </a>
+    <a data-view="nodes">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+      Nodes
+    </a>
+    <span class="section-label">Workloads</span>
+    <a data-view="pods">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M2 12h4M18 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+      Pods
+    </a>
+    <a data-view="deployments">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg>
+      Deployments
+    </a>
+    <a data-view="statefulsets">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/></svg>
+      StatefulSets
+    </a>
+    <a data-view="daemonsets">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+      DaemonSets
+    </a>
+    <span class="section-label">Network</span>
+    <a data-view="services">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
+      Services
+    </a>
+    <a data-view="ingresses">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
+      Ingresses
+    </a>
+    <span class="section-label">Config</span>
+    <a data-view="configmaps">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      ConfigMaps
+    </a>
+    <a data-view="secrets">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+      Secrets
+    </a>
+    <span class="section-label">Storage</span>
+    <a data-view="pvcs">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+      PVCs
+    </a>
+  </nav>
+  <div class="ns-box">
+    <label>Namespace</label>
+    <select id="ns-select" onchange="onNsChange()">
+      <option>Loading…</option>
+    </select>
+  </div>
+</aside>
+
+<!-- ═══ Main ═══ -->
+<div id="main">
+  <div id="topbar">
+    <h1 id="page-title">Overview</h1>
+    <div style="display:flex;align-items:center;gap:.75rem">
+      <div class="pills">
+        <div class="pill">Nodes <span id="tb-nodes">—</span></div>
+        <div class="pill">Namespaces <span id="tb-ns">—</span></div>
+        <div class="pill">Pods <span id="tb-pods">—</span></div>
+      </div>
+      <button id="refresh-btn" onclick="refreshView()">&#8635; Refresh</button>
+    </div>
+  </div>
+  <div id="content"><div class="loader">Loading</div></div>
+</div>
+
+<!-- ═══ Log Panel ═══ -->
+<div id="log-panel">
+  <div id="log-head">
+    <h3 id="log-title">Logs</h3>
+    <div style="display:flex;gap:.5rem;align-items:center">
+      <button id="log-wrap-btn" onclick="toggleWrap()" style="background:none;border:1px solid var(--border);color:var(--accent);border-radius:4px;padding:.2rem .5rem;font-size:.75rem;cursor:pointer">Wrap</button>
+      <button id="log-close" onclick="closeLog()">&#10005;</button>
+    </div>
+  </div>
+  <div id="log-toolbar">
+    <input id="log-search" type="text" placeholder="Filter logs…" oninput="filterLogs()">
+    <select id="log-tail-select" onchange="reloadLog()">
+      <option value="100">Last 100</option>
+      <option value="250">Last 250</option>
+      <option value="500">Last 500</option>
+      <option value="1000">Last 1000</option>
+    </select>
+    <span id="log-line-count" style="font-size:.75rem;color:var(--muted)"></span>
+  </div>
+  <div id="log-body"></div>
+</div>
+
+<script>
+"use strict";
+const API = '';
+let currentNs  = '';
+let currentView = 'overview';
+let logTarget  = null;
+let rawLogLines = [];
+let logWrap = true;
+
+// ── Bootstrap ──────────────────────────────────────────────────────────────
+(async function init() {
+  // Wire up sidebar links
+  document.querySelectorAll('#sidebar-nav a[data-view]').forEach(a => {
+    a.addEventListener('click', () => navigate(a));
+  });
+
+  // Load namespaces from live API
+  try {
+    const nsList = await apiFetch('/namespaces');
+    populateNsSelect(Array.isArray(nsList) ? nsList : []);
+  } catch(e) {
+    populateNsSelect([]);
+  }
+
+  // Load topbar cluster info
+  updateTopbar();
+
+  // Render default view
+  renderView('overview');
+})();
+
+async function updateTopbar() {
+  try {
+    const info = await apiFetch('/cluster/info');
+    document.getElementById('tb-nodes').textContent = info.nodeCount || '—';
+  } catch(_) {}
+  try {
+    const ns = await apiFetch('/namespaces');
+    document.getElementById('tb-ns').textContent = Array.isArray(ns) ? ns.length : '—';
+  } catch(_) {}
+  if (currentNs) {
+    try {
+      const pods = await apiFetch(`/namespaces/${currentNs}/pods`);
+      document.getElementById('tb-pods').textContent = Array.isArray(pods) ? pods.length : '—';
+    } catch(_) {}
+  }
+}
+
+function populateNsSelect(nsList) {
+  const sel = document.getElementById('ns-select');
+  if (!nsList.length) {
+    sel.innerHTML = '<option value="">No namespaces</option>';
+    return;
+  }
+  sel.innerHTML = nsList.map(n => `<option value="${n}">${n}</option>`).join('');
+  // Prefer first non-system namespace
+  const preferred = nsList.find(n => !n.startsWith('kube-') && n !== 'default') || nsList[0];
+  sel.value = preferred;
+  currentNs = preferred;
+}
+
+function onNsChange() {
+  currentNs = document.getElementById('ns-select').value;
+  renderView(currentView);
+  updateTopbar();
+}
+
+// ── Navigation ─────────────────────────────────────────────────────────────
+function navigate(el) {
+  document.querySelectorAll('#sidebar-nav a').forEach(a => a.classList.remove('active'));
+  el.classList.add('active');
+  currentView = el.dataset.view;
+  document.getElementById('page-title').textContent = el.textContent.trim();
+  renderView(currentView);
+}
+
+function refreshView() { renderView(currentView); }
+
+// ── Router ─────────────────────────────────────────────────────────────────
+async function renderView(view) {
+  const el = document.getElementById('content');
+  el.innerHTML = '<div class="loader">Loading</div>';
+  try {
+    switch (view) {
+      case 'overview':     await renderOverview(el);     break;
+      case 'nodes':        await renderNodes(el);        break;
+      case 'pods':         await renderPods(el);         break;
+      case 'deployments':  await renderDeployments(el);  break;
+      case 'statefulsets': await renderStatefulSets(el); break;
+      case 'daemonsets':   await renderDaemonSets(el);   break;
+      case 'services':     await renderServices(el);     break;
+      case 'ingresses':    await renderIngresses(el);    break;
+      case 'configmaps':   await renderConfigMaps(el);   break;
+      case 'secrets':      await renderSecrets(el);      break;
+      case 'pvcs':         await renderPVCs(el);         break;
+    }
+  } catch(e) {
+    el.innerHTML = `<div class="empty">&#9888; Error: ${e.message}</div>`;
+  }
+}
+
+// ── API helpers ────────────────────────────────────────────────────────────
+async function apiFetch(path) {
+  const r = await fetch(API + path);
+  if (!r.ok) throw new Error(`${r.status} ${r.statusText} (${path})`);
+  return r.json();
+}
+async function apiText(path) {
+  const r = await fetch(API + path);
+  if (!r.ok) throw new Error(`${r.status} ${r.statusText} (${path})`);
+  return r.text();
+}
+
+// ── Tag helpers ────────────────────────────────────────────────────────────
+function phaseTag(phase) {
+  if (!phase) return "<span class='tag tag-muted'>Unknown</span>";
+  const map = { Running:'green', Succeeded:'blue', Pending:'warn', Failed:'danger', Terminating:'warn' };
+  return `<span class='tag tag-${map[phase]||'muted'}'>${phase}</span>`;
+}
+function readyTag(ready) {
+  return ready ? "<span class='tag tag-green'>Ready</span>" : "<span class='tag tag-warn'>Not Ready</span>";
+}
+function svcTypeTag(t) {
+  const map = { ClusterIP:'blue', NodePort:'warn', LoadBalancer:'green', ExternalName:'muted' };
+  return `<span class='tag tag-${map[t]||'muted'}'>${t||'—'}</span>`;
+}
+function mkSection(title, count, bodyHtml) {
+  return `<div class="section">
+    <div class="section-head" onclick="toggleSection(this)">
+      <h2>${title} <span class="badge">${count}</span></h2>
+      <span style="color:var(--muted);font-size:.8rem">&#9650;</span>
+    </div>
+    <div class="section-body">${bodyHtml}</div>
+  </div>`;
+}
+function toggleSection(head) {
+  const body = head.nextElementSibling;
+  const arrow = head.querySelector('span:last-child');
+  if (body.style.display === 'none') { body.style.display = ''; arrow.innerHTML = '&#9650;'; }
+  else { body.style.display = 'none'; arrow.innerHTML = '&#9660;'; }
+}
+
+// ── Views ──────────────────────────────────────────────────────────────────
+async function renderOverview(el) {
+  const [cluster, pods, deps] = await Promise.all([
+    apiFetch('/cluster/info'),
+    apiFetch(`/namespaces/${currentNs}/pods`),
+    apiFetch(`/namespaces/${currentNs}/deployments`),
+  ]);
+  const running  = pods.filter(p => p.phase === 'Running').length;
+  const notReady = pods.filter(p => !p.ready).length;
+  const depOk    = deps.filter(d => d.ready === d.replicas && d.replicas > 0).length;
+  el.innerHTML = `
+    <div class="stat-grid">
+      <div class="stat-card"><div class="label">K8s Version</div><div class="value c-blue" style="font-size:1.1rem">${cluster.version||'—'}</div></div>
+      <div class="stat-card"><div class="label">Nodes</div><div class="value c-green">${cluster.nodeCount}</div></div>
+      <div class="stat-card"><div class="label">Pods (${currentNs})</div><div class="value c-blue">${pods.length}</div><div class="sub">${running} running</div></div>
+      <div class="stat-card"><div class="label">Not Ready</div><div class="value ${notReady>0?'c-danger':'c-green'}">${notReady}</div></div>
+      <div class="stat-card"><div class="label">Deployments</div><div class="value c-blue">${deps.length}</div><div class="sub">${depOk} healthy</div></div>
+    </div>
+    ${mkSection('Pods', pods.length, podsTable(pods, currentNs))}
+    ${mkSection('Deployments', deps.length, deploymentsTable(deps))}`;
+}
+
+async function renderNodes(el) {
+  const metrics = await apiFetch('/metrics/nodes');
+  const cards = metrics.map(n => {
+    const ready = n.ready === 'True';
+    return `<div class="node-card">
+      <div class="node-name">${ready ? '🟢' : '🔴'} ${n.name}</div>
+      <div class="node-row"><span class="nk">CPU capacity</span><span class="nv">${n.cpu||'—'}</span></div>
+      <div class="node-row"><span class="nk">CPU allocatable</span><span class="nv">${n.allocatable_cpu||'—'}</span></div>
+      <div class="node-row"><span class="nk">Memory</span><span class="nv">${n.memory||'—'}</span></div>
+      <div class="node-row"><span class="nk">Mem allocatable</span><span class="nv">${n.allocatable_memory||'—'}</span></div>
+      <div class="node-row"><span class="nk">Status</span>${readyTag(ready)}</div>
+    </div>`;
+  }).join('');
+  el.innerHTML = `<div class="node-grid">${cards}</div>`;
+}
+
+async function renderPods(el) {
+  const pods = await apiFetch(`/namespaces/${currentNs}/pods`);
+  el.innerHTML = mkSection('Pods', pods.length, podsTable(pods, currentNs));
+}
+
+function podsTable(pods, ns) {
+  if (!pods.length) return "<div class='empty'>No pods found</div>";
+  const rows = pods.map(p => `<tr>
+    <td class="mono">${p.name}</td>
+    <td>${phaseTag(p.phase)}</td>
+    <td>${p.ready ? '&#10003;' : '&#9888;'}</td>
+    <td>${p.restarts ?? 0}</td>
+    <td><button onclick="openLog('${ns}','${p.name}')"
+      style="background:none;border:1px solid var(--border);color:var(--accent);border-radius:4px;padding:.2rem .5rem;font-size:.75rem;cursor:pointer">
+      &#128203; Logs
+    </button></td>
+  </tr>`).join('');
+  return `<table><thead><tr><th>Name</th><th>Phase</th><th>Ready</th><th>Restarts</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+async function renderDeployments(el) {
+  const deps = await apiFetch(`/namespaces/${currentNs}/deployments`);
+  el.innerHTML = mkSection('Deployments', deps.length, deploymentsTable(deps));
+}
+
+function deploymentsTable(deps) {
+  if (!deps.length) return "<div class='empty'>No deployments found</div>";
+  const rows = deps.map(d => {
+    const healthy = d.ready === d.replicas && d.replicas > 0;
+    return `<tr>
+      <td class="mono">${d.name}</td>
+      <td>${d.replicas ?? 0}</td>
+      <td>${d.ready ?? 0} / ${d.replicas ?? 0}</td>
+      <td>${d.available ?? 0}</td>
+      <td><span class="tag ${healthy?'tag-green':'tag-warn'}">${healthy?'Healthy':'Degraded'}</span></td>
+    </tr>`;
+  }).join('');
+  return `<table><thead><tr><th>Name</th><th>Desired</th><th>Ready</th><th>Available</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+async function renderStatefulSets(el) {
+  const sets = await apiFetch(`/namespaces/${currentNs}/statefulsets`);
+  if (!sets.length) { el.innerHTML = `<div class="empty">No StatefulSets in ${currentNs}</div>`; return; }
+  const rows = sets.map(s => `<tr>
+    <td class="mono">${s.name}</td>
+    <td>${s.replicas ?? 0}</td>
+    <td>${s.ready ?? 0} / ${s.replicas ?? 0}</td>
+    <td class="mono" style="font-size:.72rem">${(s.containers||[]).map(c=>c.Image||c.image||'').join(', ')}</td>
+  </tr>`).join('');
+  el.innerHTML = mkSection('StatefulSets', sets.length, `<table><thead><tr><th>Name</th><th>Desired</th><th>Ready</th><th>Image</th></tr></thead><tbody>${rows}</tbody></table>`);
+}
+
+async function renderDaemonSets(el) {
+  const sets = await apiFetch(`/namespaces/${currentNs}/daemonsets`);
+  if (!sets.length) { el.innerHTML = `<div class="empty">No DaemonSets in ${currentNs}</div>`; return; }
+  const rows = sets.map(d => `<tr>
+    <td class="mono">${d.name}</td>
+    <td>${d.desired ?? 0}</td>
+    <td>${d.ready ?? 0}</td>
+    <td class="mono" style="font-size:.72rem">${(d.containers||[]).map(c=>c.Image||c.image||'').join(', ')}</td>
+  </tr>`).join('');
+  el.innerHTML = mkSection('DaemonSets', sets.length, `<table><thead><tr><th>Name</th><th>Desired</th><th>Ready</th><th>Image</th></tr></thead><tbody>${rows}</tbody></table>`);
+}
+
+async function renderServices(el) {
+  const svcs = await apiFetch(`/namespaces/${currentNs}/services`);
+  if (!svcs.length) { el.innerHTML = `<div class="empty">No services in ${currentNs}</div>`; return; }
+  const rows = svcs.map(s => `<tr>
+    <td class="mono">${s.name}</td>
+    <td>${svcTypeTag(s.type)}</td>
+    <td class="mono">${s.clusterIP||'—'}</td>
+    <td>${(s.ports||[]).map(p=>`${p.Port||p.port}/${p.Protocol||p.protocol}`).join(', ')||'—'}</td>
+  </tr>`).join('');
+  el.innerHTML = mkSection('Services', svcs.length, `<table><thead><tr><th>Name</th><th>Type</th><th>ClusterIP</th><th>Ports</th></tr></thead><tbody>${rows}</tbody></table>`);
+}
+
+async function renderIngresses(el) {
+  const ings = await apiFetch(`/namespaces/${currentNs}/ingresses`);
+  if (!ings.length) { el.innerHTML = `<div class="empty">No ingresses in ${currentNs}</div>`; return; }
+  const rows = ings.map(i => {
+    const hosts = (i.rules||[]).map(r=>r.host||'*').join(', ');
+    const tls   = (i.tls||[]).length > 0 ? '&#128274; TLS' : '—';
+    return `<tr>
+      <td class="mono">${i.name}</td>
+      <td class="mono">${hosts}</td>
+      <td>${i.ingressClass||'—'}</td>
+      <td>${tls}</td>
+    </tr>`;
+  }).join('');
+  el.innerHTML = mkSection('Ingresses', ings.length, `<table><thead><tr><th>Name</th><th>Hosts</th><th>Class</th><th>TLS</th></tr></thead><tbody>${rows}</tbody></table>`);
+}
+
+async function renderConfigMaps(el) {
+  const cms = await apiFetch(`/namespaces/${currentNs}/configmaps`);
+  if (!cms.length) { el.innerHTML = `<div class="empty">No ConfigMaps in ${currentNs}</div>`; return; }
+  const rows = cms.map(c => `<tr>
+    <td class="mono">${c.name}</td>
+    <td>${(c.keys||[]).length}</td>
+    <td style="font-size:.75rem;color:var(--muted)">${(c.keys||[]).slice(0,5).join(', ')}${(c.keys||[]).length>5?' …':''}</td>
+  </tr>`).join('');
+  el.innerHTML = mkSection('ConfigMaps', cms.length, `<table><thead><tr><th>Name</th><th>Keys</th><th>Preview</th></tr></thead><tbody>${rows}</tbody></table>`);
+}
+
+async function renderSecrets(el) {
+  const secrets = await apiFetch(`/namespaces/${currentNs}/secrets`);
+  if (!secrets.length) { el.innerHTML = `<div class="empty">No secrets in ${currentNs}</div>`; return; }
+  const rows = secrets.map(s => `<tr>
+    <td class="mono">${s.name}</td>
+    <td><span class="tag tag-muted">${s.type||'Opaque'}</span></td>
+    <td>${(s.keys||[]).length}</td>
+    <td style="font-size:.75rem;color:var(--muted)">${(s.keys||[]).slice(0,4).join(', ')}${(s.keys||[]).length>4?' …':''}</td>
+  </tr>`).join('');
+  el.innerHTML = mkSection('Secrets', secrets.length, `<table><thead><tr><th>Name</th><th>Type</th><th>Keys</th><th>Key names</th></tr></thead><tbody>${rows}</tbody></table>`);
+}
+
+async function renderPVCs(el) {
+  const pvcs = await apiFetch(`/namespaces/${currentNs}/persistentvolumeclaims`);
+  if (!pvcs.length) { el.innerHTML = `<div class="empty">No PVCs in ${currentNs}</div>`; return; }
+  const rows = pvcs.map(p => `<tr>
+    <td class="mono">${p.name}</td>
+    <td>${phaseTag(p.status)}</td>
+    <td>${p.storageClass||'—'}</td>
+    <td>${p.capacity ? JSON.stringify(p.capacity) : '—'}</td>
+    <td class="mono" style="font-size:.72rem">${p.volumeName||'—'}</td>
+  </tr>`).join('');
+  el.innerHTML = mkSection('PersistentVolumeClaims', pvcs.length, `<table><thead><tr><th>Name</th><th>Status</th><th>StorageClass</th><th>Capacity</th><th>Volume</th></tr></thead><tbody>${rows}</tbody></table>`);
+}
+
+// ── Log viewer ─────────────────────────────────────────────────────────────
+async function openLog(ns, pod) {
+  logTarget = { ns, pod };
+  const tail = document.getElementById('log-tail-select').value;
+  document.getElementById('log-title').textContent = `${pod}  ·  ${ns}`;
+  document.getElementById('log-panel').classList.add('open');
+  document.getElementById('log-body').innerHTML = '<div class="loader">Fetching logs</div>';
+  document.getElementById('log-search').value = '';
+  document.getElementById('log-line-count').textContent = '';
+  try {
+    const text = await apiText(`/namespaces/${ns}/pods/${pod}/logs?tail=${tail}`);
+    rawLogLines = text.split('\n');
+    document.getElementById('log-line-count').textContent = `${rawLogLines.length} lines`;
+    renderLogLines(rawLogLines, '');
+  } catch(e) {
+    document.getElementById('log-body').textContent = 'Error: ' + e.message;
+  }
+}
+
+async function reloadLog() {
+  if (logTarget) openLog(logTarget.ns, logTarget.pod);
+}
+
+function renderLogLines(lines, filter) {
+  const lf   = filter.toLowerCase();
+  const body = document.getElementById('log-body');
+  const html = lines.map(line => {
+    const escaped = line.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const ll = line.toLowerCase();
+    let cls = '';
+    if (ll.includes('error') || ll.includes('exception') || ll.includes('fatal')) cls = 'hl-error';
+    else if (ll.includes('warn')) cls = 'hl-warn';
+    else if (ll.includes('info') || ll.includes('started') || ll.includes('ready')) cls = 'hl-info';
+    if (lf && !ll.includes(lf)) return '';
+    const matchCls = lf ? ' hl-match' : '';
+    return `<span class="log-line ${cls}${matchCls}">${escaped}</span>`;
+  }).join('\n');
+  body.innerHTML = html || '<span style="color:var(--muted)">No matching lines</span>';
+  body.style.whiteSpace = logWrap ? 'pre-wrap' : 'pre';
+}
+
+function filterLogs() {
+  renderLogLines(rawLogLines, document.getElementById('log-search').value);
+}
+
+function closeLog() {
+  document.getElementById('log-panel').classList.remove('open');
+  logTarget = null;
+}
+
+function toggleWrap() {
+  logWrap = !logWrap;
+  document.getElementById('log-body').style.whiteSpace = logWrap ? 'pre-wrap' : 'pre';
+  document.getElementById('log-wrap-btn').style.color = logWrap ? 'var(--accent)' : 'var(--muted)';
+}
+</script>
+</body>
+</html>

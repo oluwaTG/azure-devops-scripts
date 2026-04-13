@@ -5,6 +5,17 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-  <PackageReference Include="KubernetesClient" Version="10.0.1" />
+    <PackageReference Include="KubernetesClient" Version="10.0.1" />
+  </ItemGroup>
+  <!-- Copy the ui/ folder into the publish output so it is available at runtime -->
+  <ItemGroup>
+    <Content Include="ui/**">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+  <!-- Exclude backup/copy files from compilation -->
+  <ItemGroup>
+    <Compile Remove="Program copy.cs" />
   </ItemGroup>
 </Project>

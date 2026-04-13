@@ -1,14 +1,19 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ .Release.Name }}
+  name: {{ include "mcp-server.fullname" . }}
+  namespace: {{ .Release.Namespace }}
   labels:
-{{ toYaml .Values.labels | indent 4 }}
+    {{- include "mcp-server.labels" . | nindent 4 }}
 spec:
   type: {{ .Values.service.type }}
   ports:
-    - protocol: TCP
+    - name: http
+      protocol: TCP
       port: {{ .Values.service.port }}
-      targetPort: {{ .Values.service.targetPort }}
+      targetPort: http
+      {{- if and (eq .Values.service.type "NodePort") .Values.service.nodePort }}
+      nodePort: {{ .Values.service.nodePort }}
+      {{- end }}
   selector:
-{{ toYaml .Values.labels | indent 4 }}
+    {{- include "mcp-server.selectorLabels" . | nindent 4 }}

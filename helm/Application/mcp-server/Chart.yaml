@@ -1,5 +1,25 @@
 apiVersion: v2
 name: mcp-server
-description: A Helm chart for deploying the MCP server
-version: 0.1.0
-appVersion: "1.0.0"
+description: >
+  A read-only Kubernetes dashboard and MCP (Model Context Protocol) server.
+  Exposes cluster resources via a REST API and a built-in SPA dashboard,
+  enabling AI tooling (e.g. LLM chatbots) to query live cluster state.
+type: application
+version: 1.0.0
+appVersion: "1.0.3"
+
+keywords:
+  - kubernetes
+  - mcp
+  - dashboard
+  - devops
+  - ai
+
+home: https://github.com/elumole22/azure-devops-scripts
+
+sources:
+  - https://github.com/elumole22/azure-devops-scripts
+
+maintainers:
+  - name: elumole22
+    url: https://github.com/elumole22
