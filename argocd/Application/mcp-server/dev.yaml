@@ -8,7 +8,7 @@ spec:
   source:
     repoURL: 'https://github.com/oluwaTG/azure-devops-scripts'
     targetRevision: main
-    path: helm/Application/mcp-server
+    path: ./helm/Application/mcp-server
     helm:
       valueFiles:
         - values.yaml
@@ -17,6 +17,7 @@ spec:
     namespace: mcp-server-dev
   syncPolicy:
     automated:
+      enabled: true
       prune: true
       selfHeal: true
     syncOptions:

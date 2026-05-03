@@ -19,11 +19,35 @@ mcp_url = os.getenv("MCP_SERVER_URL", "http://mcp-server.local")
 SYSTEM_PROMPT = """You are an expert Kubernetes assistant.
 You MUST answer using ONLY the live cluster data provided in the [SECTION] blocks below.
 Do NOT make up pod names, namespaces, or resource values.
-The data is organised into labelled sections such as [PODS], [DEPLOYMENTS], [LOGS], [NAMESPACES], etc.
-When asked about pods, always look at the [PODS] or [PODS_BY_NAMESPACE] section and list them explicitly.
-When asked about logs or errors but no specific pod is named, list the pod names from [PODS] and ask the user to specify which one.
-If a section is missing from the data, say so clearly rather than claiming the data doesn't exist.
-Format your answer clearly using bullet points or tables where helpful."""
+
+The data is organised into labelled sections. Key sections you may receive:
+- [PODS] / [PODS_BY_NAMESPACE]: running pods, their status, restarts, and containers
+- [LOGS]: stdout/stderr from a specific container
+- [EVENTS] / [NAMESPACE_EVENTS]: Kubernetes events (Warnings, OOMKills, back-offs, etc.)
+- [DEPLOYMENTS] / [DEPLOYMENT]: deployment spec and status
+- [STATEFULSETS], [DAEMONSETS], [REPLICASETS]: other workload types
+- [JOBS], [JOB]: batch job details and completion status
+- [CRONJOBS], [CRONJOB]: scheduled job definitions and last run status
+- [HPA]: HorizontalPodAutoscaler current replicas vs desired
+- [SERVICES], [SERVICE]: ClusterIP / NodePort / LoadBalancer config
+- [INGRESSES], [INGRESS]: Ingress host/path routing rules
+- [NETWORKPOLICIES]: ingress/egress firewall rules
+- [CONFIGMAPS], [SECRETS]: configuration and secret key names
+- [RESOURCEQUOTAS]: namespace-level CPU/memory/object quotas
+- [LIMITRANGES]: default container resource limits
+- [STORAGECLASSES]: available storage provisioners
+- [NODES], [NODE_DETAIL]: node capacity, conditions, and taints
+- [RBAC]: roles, role bindings, cluster roles, cluster role bindings
+- [TROUBLESHOOT]: deep-dive service health report from the MCP server
+- [AUTO_TROUBLESHOOT_SUMMARY]: synthesised troubleshooting report combining all signals
+
+When asked about pods, always look at [PODS] or [PODS_BY_NAMESPACE] and list them explicitly.
+When asked for logs but no pod is named, list pod names from [PODS] and ask the user to clarify.
+When logs ARE provided in [LOGS] or [LOGS_*] sections, display them directly in a code block — do NOT suggest kubectl commands or tell the user to run commands themselves.
+When asked to troubleshoot, synthesise ALL provided sections — events, logs, pod status, deployment state — into a root-cause analysis with recommended actions.
+Never suggest running kubectl or any CLI command when the live data has already been fetched and is present in the sections below.
+If a section is missing from the data, say so clearly rather than claiming data doesn't exist.
+Format answers clearly using bullet points or tables where helpful."""
 
 # ── Session state ─────────────────────────────────────────────────────────────
 if "chat_history" not in st.session_state:
@@ -67,6 +91,9 @@ def extract_entities(question: str, known_namespaces: list[str] = None):
         "show", "what", "which", "how", "why", "when", "where", "who",
         "errors", "error", "issues", "issue", "running", "crashed", "down",
         "there", "their", "they", "then", "than", "last", "latest",
+        "job", "jobs", "cronjob", "cronjobs", "node", "nodes", "hpa",
+        "service", "services", "deployment", "deployments", "ingress",
+        "fetch", "get", "show", "give", "display", "retrieve", "print",
     }
 
     # 1. Explicit "X namespace" or "namespace X" patterns (highest confidence)
@@ -87,7 +114,9 @@ def extract_entities(question: str, known_namespaces: list[str] = None):
         ns_lower = [n.lower() for n in known_namespaces]
         q_words = re.findall(r"[\w-]+", question.lower())
         for word in q_words:
-            if word in ns_lower and word not in stopwords and (len(word) >= 4 or "-" in word):
+            # Accept any token that is an actual known namespace name, regardless of length.
+            # The stopwords list guards against false positives.
+            if word in ns_lower and word not in stopwords:
                 ns = word
                 break
 
@@ -100,18 +129,34 @@ def extract_entities(question: str, known_namespaces: list[str] = None):
         if m and m.group(1).lower() not in stopwords:
             pod = m.group(1)
 
-    # 4. Deployment / service / app name
+    # 4. Container name: "container <name>", "<name> container", "-c <name>"
+    container = None
     for pattern in [
-        r"\b(?:deployment|service|app|svc)\s+([\w-]+)",
+        r"\bcontainer[s]?\s+([\w][\w-]*)",
+        r"\b([\w][\w-]*)\s+container\b",
+        r"\b-c\s+([\w][\w-]*)",
+    ]:
+        m = re.search(pattern, question, re.IGNORECASE)
+        if m and m.group(1).lower() not in stopwords:
+            container = m.group(1)
+            break
+
+    # 5. Deployment / service / app name — also catches job/cronjob/node targets
+    for pattern in [
+        r"\b(?:deployment|service|app|svc)\s+([\w-]+)",    # "app devops-helper"
+        r"\b([\w-]+)\s+(?:app|service|svc|deployment)\b",  # "devops-helper app"
         r"\btroubleshoot\s+([\w-]+)",
-        r"\bfor\s+([\w-]+)\s+(?:pod|service|deployment|app)",
+        r"\bfor\s+([\w-]+)\s+(?:pod|service|deployment|app|job|cronjob)",
+        r"\bfrom\s+(?:the\s+)?([\w-]+)\s+(?:app|service|svc|deployment)\b",  # "from the devops-helper app"
+        r"\b(?:job|cronjob|node)\s+([\w-]+)",
+        r"\b(?:debug|investigate|fix|what(?:'s| is) wrong with)\s+([\w-]+)",
     ]:
         m = re.search(pattern, question, re.IGNORECASE)
         if m and m.group(1).lower() not in stopwords:
             service = m.group(1)
             break
 
-    return ns, pod, service
+    return ns, pod, service, container
 
 def classify_intent(question: str) -> list[str]:
     """Return a prioritised list of MCP data to fetch based on question keywords."""
@@ -123,22 +168,36 @@ def classify_intent(question: str) -> list[str]:
         calls.append("pod_metrics")
     if any(w in q for w in ["namespace", "namespaces", " ns "]):
         calls.append("namespaces")
+    if any(w in q for w in ["node", "nodes", "capacity", "taint", "condition", "schedulable"]):
+        calls.append("nodes")
     if any(w in q for w in ["pod", "pods", "container", "running", "crash",
-                             "restart", "restarts", "phase", "status", "ready"]):
+                             "restart", "restarts", "phase", "status", "ready",
+                             "what is going on", "what's going on", "what's happening",
+                             "what is happening", "going on", "happening", "overview", "health"]):
         calls.append("pods")
     if any(w in q for w in ["log", "logs", "error", "exception", "stdout", "stderr", "output"]):
         calls.append("logs")
-    if any(w in q for w in ["event", "events", "warning", "oom", "kill", "backoff"]):
+    if any(w in q for w in ["event", "events", "warning", "oom", "kill", "backoff", "back-off",
+                             "what is going on", "what's going on", "what's happening",
+                             "what is happening", "going on", "happening", "status", "overview",
+                             "health", "healthy", "unhealthy", "activity"]):
         calls.append("events")
-    if any(w in q for w in ["troubleshoot", "debug", "broken", "down", "failing",
-                             "issue", "problem", "not working", "investigate"]):
+    if any(w in q for w in ["troubleshoot", "debug", "broken", "down", "failing", "not working",
+                             "investigate", "what's wrong", "what is wrong", "why is", "fix",
+                             "unhealthy", "degraded", "crashing", "not responding", "unreachable"]):
         calls.append("troubleshoot")
-    if any(w in q for w in ["deployment", "deployments", "deploy", "replica", "replicas", "rollout"]):
+    if any(w in q for w in ["deployment", "deployments", "deploy", "rollout",
+                             "what is going on", "what's going on", "what's happening",
+                             "what is happening", "going on", "happening", "overview", "health"]):
         calls.append("deployments")
+    if any(w in q for w in ["replicaset", "replicasets", "replica set"]):
+        calls.append("replicasets")
     if any(w in q for w in ["service", "services", "svc", "clusterip", "nodeport", "loadbalancer"]):
         calls.append("services")
     if any(w in q for w in ["ingress", "ingresses", "route", "host", "tls", "hostname"]):
         calls.append("ingresses")
+    if any(w in q for w in ["networkpolicy", "networkpolicies", "network policy", "firewall", "egress", "ingress policy"]):
+        calls.append("networkpolicies")
     if any(w in q for w in ["configmap", "configmaps", "config", "configuration"]):
         calls.append("configmaps")
     if any(w in q for w in ["secret", "secrets"]):
@@ -152,8 +211,20 @@ def classify_intent(question: str) -> list[str]:
         calls.append("statefulsets")
     if any(w in q for w in ["daemonset", "daemonsets"]):
         calls.append("daemonsets")
+    if any(w in q for w in ["job", "jobs", "batch"]):
+        calls.append("jobs")
+    if any(w in q for w in ["cronjob", "cronjobs", "cron", "scheduled"]):
+        calls.append("cronjobs")
+    if any(w in q for w in ["hpa", "autoscal", "horizontal", "scale", "scaling"]):
+        calls.append("hpa")
+    if any(w in q for w in ["resourcequota", "resourcequotas", "quota", "quotas", "limit range"]):
+        calls.append("resourcequotas")
+    if any(w in q for w in ["limitrange", "limitranges", "default limit", "default request"]):
+        calls.append("limitranges")
+    if any(w in q for w in ["storageclass", "storageclasses", "provisioner", "storage class"]):
+        calls.append("storageclasses")
     if any(w in q for w in ["pvc", "pv", "persistentvolume", "persistentvolumeclaim",
-                             "volume", "volumes", "storage", "storageclass"]):
+                             "volume", "volumes"]):
         calls.append("volumes")
 
     return list(dict.fromkeys(calls))
@@ -164,7 +235,7 @@ def fetch_mcp_context(question: str) -> tuple[dict, list[str]]:
     1. Always fetch namespaces first so we can match namespace names in the question.
     2. Extract entities (ns, pod, service) with cluster-aware matching.
     3. Call only the endpoints relevant to the question intent.
-    4. If a namespace is needed but not found, fall back to fetching pods across all namespaces.
+    4. Auto-troubleshoot mode: when triggered, fan out across events, logs, deployment state.
     """
     ctx: dict = {}
     endpoints_used: list[str] = []
@@ -179,29 +250,34 @@ def fetch_mcp_context(question: str) -> tuple[dict, list[str]]:
 
     # Step 2: extract entities with knowledge of real namespace names
     intents = classify_intent(question)
-    ns, pod, service = extract_entities(question, known_namespaces=all_namespaces)
+    ns, pod, service, container = extract_entities(question, known_namespaces=all_namespaces)
 
-    needs_pods    = any(i in intents for i in ["pods", "logs", "events", "troubleshoot"])
-    needs_metrics = any(i in intents for i in ["node_metrics", "pod_metrics"])
+    needs_pods = any(i in intents for i in ["pods", "logs", "events", "troubleshoot"])
 
     # Step 3: node metrics (no namespace needed)
     if "node_metrics" in intents:
         ctx["node_metrics"] = mcp_get("/metrics/nodes")
         endpoints_used.append("/metrics/nodes")
 
-    # Step 4: pod metrics across all namespaces (no namespace needed)
+    # Step 4: pod metrics
     if "pod_metrics" in intents:
         ctx["pod_metrics"] = mcp_get("/metrics/pods")
         endpoints_used.append("/metrics/pods")
 
-    # Step 5: pod listing
+    # Step 5: nodes
+    if "nodes" in intents:
+        ctx["nodes"] = mcp_get("/nodes")
+        endpoints_used.append("/nodes")
+        if service:  # "service" slot reused for node name when user says "node <name>"
+            ctx["node_detail"] = mcp_get(f"/nodes/{service}")
+            endpoints_used.append(f"/nodes/{service}")
+
+    # Step 6: pod listing
     if needs_pods:
         if ns:
-            # Specific namespace
             ctx["pods"] = mcp_get(f"/namespaces/{ns}/pods")
             endpoints_used.append(f"/namespaces/{ns}/pods")
         else:
-            # No namespace found — fetch pods from every namespace
             all_pods = {}
             for n in all_namespaces:
                 result = mcp_get(f"/namespaces/{n}/pods")
@@ -211,26 +287,159 @@ def fetch_mcp_context(question: str) -> tuple[dict, list[str]]:
                 ctx["pods_by_namespace"] = all_pods
                 endpoints_used.append("/namespaces/*/pods (all)")
 
-    # Step 6: logs — need both ns and pod name
+    # Step 7: logs — container-specific if named, otherwise all-containers tail
     if "logs" in intents:
         if ns and pod:
-            ctx["logs"] = mcp_get(f"/namespaces/{ns}/pods/{pod}/logs?tail=100", text=True)
-            endpoints_used.append(f"/namespaces/{ns}/pods/{pod}/logs")
-        # If we have a namespace but no specific pod, pods were already fetched in step 5.
-        # The LLM will see [PODS] and can ask the user to clarify which pod they mean.
+            if container:
+                # Per-container logs
+                ctx["logs"] = mcp_get(
+                    f"/namespaces/{ns}/pods/{pod}/containers/{container}/logs?tail=100",
+                    text=True,
+                )
+                endpoints_used.append(
+                    f"/namespaces/{ns}/pods/{pod}/containers/{container}/logs"
+                )
+            else:
+                # All containers combined
+                ctx["logs"] = mcp_get(
+                    f"/namespaces/{ns}/pods/{pod}/logs?tail=100", text=True
+                )
+                endpoints_used.append(f"/namespaces/{ns}/pods/{pod}/logs")
+        elif ns and service:
+            # No explicit pod name — find pods matching the app/service name and fetch their logs
+            pods_data = ctx.get("pods", [])
+            if not isinstance(pods_data, list) or not pods_data:
+                pods_data = mcp_get(f"/namespaces/{ns}/pods")
+                ctx["pods"] = pods_data
+                endpoints_used.append(f"/namespaces/{ns}/pods")
+            matching = [
+                p for p in (pods_data if isinstance(pods_data, list) else [])
+                if isinstance(p, dict) and service.lower() in p.get("name", "").lower()
+            ]
+            for p in matching[:2]:  # fetch logs for up to 2 matching pods
+                pname = p.get("name", "")
+                if pname:
+                    log_path = (
+                        f"/namespaces/{ns}/pods/{pname}/containers/{container}/logs?tail=150"
+                        if container
+                        else f"/namespaces/{ns}/pods/{pname}/logs?tail=150"
+                    )
+                    ctx[f"logs_{pname}"] = mcp_get(log_path, text=True)
+                    endpoints_used.append(log_path.split("?")[0])
+            if not matching:
+                ctx["logs_note"] = (
+                    f"No pods matching '{service}' found in namespace '{ns}'. "
+                    "Check [PODS] for the exact pod name."
+                )
+        # If we have ns but no pod and no service, pods are already in [PODS].
+        # The LLM will see [PODS] and ask the user to clarify which pod they mean.
 
-    # Step 7: events
-    if "events" in intents and ns and pod:
-        ctx["events"] = mcp_get(f"/namespaces/{ns}/pods/{pod}/events")
-        endpoints_used.append(f"/namespaces/{ns}/pods/{pod}/events")
+    # Step 8: events — pod-level or namespace-level
+    if "events" in intents:
+        if ns and pod:
+            ctx["events"] = mcp_get(f"/namespaces/{ns}/pods/{pod}/events")
+            endpoints_used.append(f"/namespaces/{ns}/pods/{pod}/events")
+        elif ns:
+            ctx["namespace_events"] = mcp_get(f"/namespaces/{ns}/events")
+            endpoints_used.append(f"/namespaces/{ns}/events")
 
-    # Step 8: troubleshoot
-    svc_name = service or pod
-    if "troubleshoot" in intents and ns and svc_name:
-        ctx["troubleshoot"] = mcp_get(f"/troubleshoot/service/{ns}/{svc_name}")
-        endpoints_used.append(f"/troubleshoot/service/{ns}/{svc_name}")
-    elif "troubleshoot" in intents and not ns:
-        ctx["troubleshoot_note"] = "Namespace not identified. Please specify a namespace to troubleshoot."
+    # ── AUTO-TROUBLESHOOT ─────────────────────────────────────────────────────
+    # When troubleshoot intent is detected, fan out to gather all diagnostic signals.
+    if "troubleshoot" in intents:
+        svc_name = service or pod
+        if ns and svc_name:
+            # 1. Dedicated troubleshoot endpoint
+            ctx["troubleshoot"] = mcp_get(f"/troubleshoot/service/{ns}/{svc_name}")
+            endpoints_used.append(f"/troubleshoot/service/{ns}/{svc_name}")
+
+            # 2. Namespace-wide events (catches OOMKills, back-offs, scheduling failures)
+            ctx["namespace_events"] = mcp_get(f"/namespaces/{ns}/events")
+            endpoints_used.append(f"/namespaces/{ns}/events")
+
+            # 3. Deployment state for the named service/app
+            ctx["deployment"] = mcp_get(f"/namespaces/{ns}/deployments/{svc_name}")
+            endpoints_used.append(f"/namespaces/{ns}/deployments/{svc_name}")
+
+            # 4. Pod list so we can find crashed/pending pods
+            if "pods" not in ctx:
+                ctx["pods"] = mcp_get(f"/namespaces/{ns}/pods")
+                endpoints_used.append(f"/namespaces/{ns}/pods")
+
+            # 5. Fetch logs for any pod that isn't Running/Succeeded
+            pods_data = ctx.get("pods", [])
+            if isinstance(pods_data, list):
+                unhealthy_pods = [
+                    p for p in pods_data
+                    if isinstance(p, dict)
+                    and p.get("phase") not in ("Running", "Succeeded")
+                    and svc_name.lower() in p.get("name", "").lower()
+                ]
+                # Also grab logs from the first matching running pod if no unhealthy ones
+                if not unhealthy_pods:
+                    unhealthy_pods = [
+                        p for p in pods_data
+                        if isinstance(p, dict) and svc_name.lower() in p.get("name", "").lower()
+                    ][:1]
+                for p in unhealthy_pods[:3]:  # cap at 3 pods to avoid context explosion
+                    pname = p.get("name", "")
+                    ctx[f"logs_{pname}"] = mcp_get(
+                        f"/namespaces/{ns}/pods/{pname}/logs?tail=80", text=True
+                    )
+                    endpoints_used.append(f"/namespaces/{ns}/pods/{pname}/logs")
+
+            # 6. HPA (are replicas being throttled or unable to scale?)
+            ctx["hpa"] = mcp_get(f"/namespaces/{ns}/hpa")
+            endpoints_used.append(f"/namespaces/{ns}/hpa")
+
+            # 7. Resource quotas (could the namespace be out of quota?)
+            ctx["resourcequotas"] = mcp_get(f"/namespaces/{ns}/resourcequotas")
+            endpoints_used.append(f"/namespaces/{ns}/resourcequotas")
+
+            ctx["auto_troubleshoot_summary"] = (
+                f"Auto-troubleshoot for '{svc_name}' in namespace '{ns}'. "
+                "Data gathered: troubleshoot report, namespace events, deployment state, "
+                "pod logs (crashed/pending pods prioritised), HPA, resource quotas. "
+                "Synthesise all sections into a root-cause analysis."
+            )
+
+        elif ns and not svc_name:
+            # Namespace-level troubleshoot (e.g. "troubleshoot this pod" with no name,
+            # or "what's wrong in the dev namespace"): events + pods + logs for unhealthy pods
+            ctx["namespace_events"] = mcp_get(f"/namespaces/{ns}/events")
+            endpoints_used.append(f"/namespaces/{ns}/events")
+            if "pods" not in ctx:
+                ctx["pods"] = mcp_get(f"/namespaces/{ns}/pods")
+                endpoints_used.append(f"/namespaces/{ns}/pods")
+            ctx["resourcequotas"] = mcp_get(f"/namespaces/{ns}/resourcequotas")
+            endpoints_used.append(f"/namespaces/{ns}/resourcequotas")
+            # If a specific pod was extracted (e.g. "troubleshoot pod my-app-xyz"), fetch its logs
+            if pod:
+                ctx[f"logs_{pod}"] = mcp_get(
+                    f"/namespaces/{ns}/pods/{pod}/logs?tail=100", text=True
+                )
+                endpoints_used.append(f"/namespaces/{ns}/pods/{pod}/logs")
+                ctx["events"] = mcp_get(f"/namespaces/{ns}/pods/{pod}/events")
+                endpoints_used.append(f"/namespaces/{ns}/pods/{pod}/events")
+            else:
+                # No specific pod — grab logs for every unhealthy pod in the namespace
+                pods_data = ctx.get("pods", [])
+                if isinstance(pods_data, list):
+                    unhealthy = [
+                        p for p in pods_data
+                        if isinstance(p, dict)
+                        and p.get("phase") not in ("Running", "Succeeded")
+                    ]
+                    for p in unhealthy[:3]:
+                        pname = p.get("name", "")
+                        if pname:
+                            ctx[f"logs_{pname}"] = mcp_get(
+                                f"/namespaces/{ns}/pods/{pname}/logs?tail=80", text=True
+                            )
+                            endpoints_used.append(f"/namespaces/{ns}/pods/{pname}/logs")
+        else:
+            ctx["troubleshoot_note"] = (
+                "Namespace not identified. Please specify a namespace (and optionally a service/app name) to troubleshoot."
+            )
 
     # Step 9: deployments
     if "deployments" in intents:
@@ -250,7 +459,12 @@ def fetch_mcp_context(question: str) -> tuple[dict, list[str]]:
                 ctx["deployments_by_namespace"] = dep_all
                 endpoints_used.append("/namespaces/*/deployments (all)")
 
-    # Step 10: services
+    # Step 10: replicasets
+    if "replicasets" in intents and ns:
+        ctx["replicasets"] = mcp_get(f"/namespaces/{ns}/replicasets")
+        endpoints_used.append(f"/namespaces/{ns}/replicasets")
+
+    # Step 11: services
     if "services" in intents:
         if ns and service:
             ctx["service"] = mcp_get(f"/namespaces/{ns}/services/{service}")
@@ -268,7 +482,7 @@ def fetch_mcp_context(question: str) -> tuple[dict, list[str]]:
                 ctx["services_by_namespace"] = svc_all
                 endpoints_used.append("/namespaces/*/services (all)")
 
-    # Step 11: ingresses
+    # Step 12: ingresses
     if "ingresses" in intents:
         if ns and service:
             ctx["ingress"] = mcp_get(f"/namespaces/{ns}/ingresses/{service}")
@@ -286,7 +500,12 @@ def fetch_mcp_context(question: str) -> tuple[dict, list[str]]:
                 ctx["ingresses_by_namespace"] = ing_all
                 endpoints_used.append("/namespaces/*/ingresses (all)")
 
-    # Step 12: configmaps
+    # Step 13: network policies
+    if "networkpolicies" in intents and ns:
+        ctx["networkpolicies"] = mcp_get(f"/namespaces/{ns}/networkpolicies")
+        endpoints_used.append(f"/namespaces/{ns}/networkpolicies")
+
+    # Step 14: configmaps
     if "configmaps" in intents:
         if ns and service:
             ctx["configmap"] = mcp_get(f"/namespaces/{ns}/configmaps/{service}")
@@ -295,12 +514,12 @@ def fetch_mcp_context(question: str) -> tuple[dict, list[str]]:
             ctx["configmaps"] = mcp_get(f"/namespaces/{ns}/configmaps")
             endpoints_used.append(f"/namespaces/{ns}/configmaps")
 
-    # Step 13: secrets (keys only)
+    # Step 15: secrets (keys only)
     if "secrets" in intents and ns:
         ctx["secrets"] = mcp_get(f"/namespaces/{ns}/secrets")
         endpoints_used.append(f"/namespaces/{ns}/secrets")
 
-    # Step 14: RBAC
+    # Step 16: RBAC
     if "rbac" in intents:
         ctx["clusterroles"] = mcp_get("/clusterroles")
         endpoints_used.append("/clusterroles")
@@ -312,22 +531,60 @@ def fetch_mcp_context(question: str) -> tuple[dict, list[str]]:
             ctx["rolebindings"] = mcp_get(f"/namespaces/{ns}/rolebindings")
             endpoints_used.append(f"/namespaces/{ns}/rolebindings")
 
-    # Step 15: service accounts
+    # Step 17: service accounts
     if "serviceaccounts" in intents and ns:
         ctx["serviceaccounts"] = mcp_get(f"/namespaces/{ns}/serviceaccounts")
         endpoints_used.append(f"/namespaces/{ns}/serviceaccounts")
 
-    # Step 16: statefulsets
+    # Step 18: statefulsets
     if "statefulsets" in intents and ns:
         ctx["statefulsets"] = mcp_get(f"/namespaces/{ns}/statefulsets")
         endpoints_used.append(f"/namespaces/{ns}/statefulsets")
 
-    # Step 17: daemonsets
+    # Step 19: daemonsets
     if "daemonsets" in intents and ns:
         ctx["daemonsets"] = mcp_get(f"/namespaces/{ns}/daemonsets")
         endpoints_used.append(f"/namespaces/{ns}/daemonsets")
 
-    # Step 18: PVCs and PVs
+    # Step 20: jobs
+    if "jobs" in intents:
+        if ns and service:
+            ctx["job"] = mcp_get(f"/namespaces/{ns}/jobs/{service}")
+            endpoints_used.append(f"/namespaces/{ns}/jobs/{service}")
+        elif ns:
+            ctx["jobs"] = mcp_get(f"/namespaces/{ns}/jobs")
+            endpoints_used.append(f"/namespaces/{ns}/jobs")
+
+    # Step 21: cronjobs
+    if "cronjobs" in intents:
+        if ns and service:
+            ctx["cronjob"] = mcp_get(f"/namespaces/{ns}/cronjobs/{service}")
+            endpoints_used.append(f"/namespaces/{ns}/cronjobs/{service}")
+        elif ns:
+            ctx["cronjobs"] = mcp_get(f"/namespaces/{ns}/cronjobs")
+            endpoints_used.append(f"/namespaces/{ns}/cronjobs")
+
+    # Step 22: HPA
+    if "hpa" in intents and ns:
+        ctx["hpa"] = mcp_get(f"/namespaces/{ns}/hpa")
+        endpoints_used.append(f"/namespaces/{ns}/hpa")
+
+    # Step 23: resource quotas
+    if "resourcequotas" in intents and ns:
+        ctx["resourcequotas"] = mcp_get(f"/namespaces/{ns}/resourcequotas")
+        endpoints_used.append(f"/namespaces/{ns}/resourcequotas")
+
+    # Step 24: limit ranges
+    if "limitranges" in intents and ns:
+        ctx["limitranges"] = mcp_get(f"/namespaces/{ns}/limitranges")
+        endpoints_used.append(f"/namespaces/{ns}/limitranges")
+
+    # Step 25: storage classes (cluster-scoped)
+    if "storageclasses" in intents:
+        ctx["storageclasses"] = mcp_get("/storageclasses")
+        endpoints_used.append("/storageclasses")
+
+    # Step 26: PVCs and PVs
     if "volumes" in intents:
         ctx["persistentvolumes"] = mcp_get("/persistentvolumes")
         endpoints_used.append("/persistentvolumes")

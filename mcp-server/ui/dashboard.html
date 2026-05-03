@@ -155,6 +155,18 @@
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
       DaemonSets
     </a>
+    <a data-view="jobs">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
+      Jobs
+    </a>
+    <a data-view="cronjobs">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      CronJobs
+    </a>
+    <a data-view="hpa">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      Autoscalers
+    </a>
     <span class="section-label">Network</span>
     <a data-view="services">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>
@@ -163,6 +175,10 @@
     <a data-view="ingresses">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>
       Ingresses
+    </a>
+    <a data-view="networkpolicies">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      Network Policies
     </a>
     <span class="section-label">Config</span>
     <a data-view="configmaps">
@@ -177,6 +193,18 @@
     <a data-view="pvcs">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
       PVCs
+    </a>
+    <a data-view="storageclasses">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/></svg>
+      Storage Classes
+    </a>
+    <a data-view="events">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      Events
+    </a>
+    <a data-view="resourcequotas">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+      Resource Quotas
     </a>
   </nav>
   <div class="ns-box">
@@ -214,6 +242,9 @@
   </div>
   <div id="log-toolbar">
     <input id="log-search" type="text" placeholder="Filter logs…" oninput="filterLogs()">
+    <select id="log-container-select" onchange="reloadLog()" style="min-width:130px">
+      <option value="">all containers</option>
+    </select>
     <select id="log-tail-select" onchange="reloadLog()">
       <option value="100">Last 100</option>
       <option value="250">Last 250</option>
@@ -319,7 +350,14 @@ async function renderView(view) {
       case 'ingresses':    await renderIngresses(el);    break;
       case 'configmaps':   await renderConfigMaps(el);   break;
       case 'secrets':      await renderSecrets(el);      break;
-      case 'pvcs':         await renderPVCs(el);         break;
+      case 'pvcs':            await renderPVCs(el);            break;
+      case 'storageclasses':  await renderStorageclasses(el);  break;
+      case 'events':          await renderEvents(el);          break;
+      case 'jobs':            await renderJobs(el);            break;
+      case 'cronjobs':        await renderCronjobs(el);        break;
+      case 'hpa':             await renderHpa(el);             break;
+      case 'resourcequotas':  await renderResourcequotas(el);  break;
+      case 'networkpolicies': await renderNetworkpolicies(el); break;
     }
   } catch(e) {
     el.innerHTML = `<div class="empty">&#9888; Error: ${e.message}</div>`;
@@ -375,7 +413,10 @@ async function renderOverview(el) {
     apiFetch(`/namespaces/${currentNs}/deployments`),
   ]);
   const running  = pods.filter(p => p.phase === 'Running').length;
-  const notReady = pods.filter(p => !p.ready).length;
+  const notReady = pods.filter(p => {
+    const [r, t] = (p.ready || '0/0').split('/').map(Number);
+    return r < t;
+  }).length;
   const depOk    = deps.filter(d => d.ready === d.replicas && d.replicas > 0).length;
   el.innerHTML = `
     <div class="stat-grid">
@@ -412,16 +453,28 @@ async function renderPods(el) {
 
 function podsTable(pods, ns) {
   if (!pods.length) return "<div class='empty'>No pods found</div>";
-  const rows = pods.map(p => `<tr>
+  const rows = pods.map(p => {
+    const [r, t] = (p.ready || '0/0').split('/').map(Number);
+    const readyOk = r === t && t > 0;
+    const readyBadge = `<span class="tag ${readyOk ? 'tag-green' : 'tag-warn'}">${p.ready || '0/0'}</span>`;
+    // Build container tooltip list
+    const ctrs = (p.containers || []).map(c =>
+      `${c.ready ? '✔' : '✘'} ${c.name} (${c.state || '?'}, restarts: ${c.restarts})`
+    ).join('&#10;');
+    const ctrTitle = ctrs ? `title="${ctrs}"` : '';
+    return `<tr>
     <td class="mono">${p.name}</td>
     <td>${phaseTag(p.phase)}</td>
-    <td>${p.ready ? '&#10003;' : '&#9888;'}</td>
+    <td ${ctrTitle} style="cursor:${ctrs?'help':'default'}">${readyBadge}</td>
     <td>${p.restarts ?? 0}</td>
-    <td><button onclick="openLog('${ns}','${p.name}')"
-      style="background:none;border:1px solid var(--border);color:var(--accent);border-radius:4px;padding:.2rem .5rem;font-size:.75rem;cursor:pointer">
-      &#128203; Logs
-    </button></td>
-  </tr>`).join('');
+    <td style="display:flex;gap:.3rem;flex-wrap:wrap">
+      <button onclick="openLog('${ns}','${p.name}')"
+        style="background:none;border:1px solid var(--border);color:var(--accent);border-radius:4px;padding:.2rem .5rem;font-size:.75rem;cursor:pointer">
+        &#128203; Logs
+      </button>
+    </td>
+  </tr>`;
+  }).join('');
   return `<table><thead><tr><th>Name</th><th>Phase</th><th>Ready</th><th>Restarts</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
@@ -533,18 +586,162 @@ async function renderPVCs(el) {
   el.innerHTML = mkSection('PersistentVolumeClaims', pvcs.length, `<table><thead><tr><th>Name</th><th>Status</th><th>StorageClass</th><th>Capacity</th><th>Volume</th></tr></thead><tbody>${rows}</tbody></table>`);
 }
 
+async function renderStorageclasses(el) {
+  const scs = await apiFetch('/storageclasses');
+  if (!scs.length) { el.innerHTML = `<div class="empty">No storage classes found</div>`; return; }
+  const rows = scs.map(s => `<tr>
+    <td class="mono">${s.name}${s.isDefault ? " <span class='tag tag-green'>default</span>" : ''}</td>
+    <td class="mono">${s.provisioner||'—'}</td>
+    <td>${s.reclaimPolicy||'—'}</td>
+    <td>${s.volumeBindingMode||'—'}</td>
+    <td>${s.allowExpansion ? '✔' : '—'}</td>
+  </tr>`).join('');
+  el.innerHTML = mkSection('Storage Classes', scs.length, `<table><thead><tr><th>Name</th><th>Provisioner</th><th>Reclaim Policy</th><th>Binding Mode</th><th>Expandable</th></tr></thead><tbody>${rows}</tbody></table>`);
+}
+
+async function renderEvents(el) {
+  const evts = await apiFetch(`/namespaces/${currentNs}/events`);
+  if (!evts.length) { el.innerHTML = `<div class="empty">No events in ${currentNs}</div>`; return; }
+  const rows = evts.map(e => {
+    const isWarn = e.type === 'Warning';
+    return `<tr>
+      <td><span class="tag ${isWarn ? 'tag-warn' : 'tag-green'}">${e.type||'—'}</span></td>
+      <td class="mono" style="font-size:.75rem">${e.reason||'—'}</td>
+      <td class="mono" style="font-size:.75rem">${e.regarding?.kind||''} / ${e.regarding?.name||''}</td>
+      <td style="max-width:380px;white-space:normal;font-size:.75rem">${e.message||'—'}</td>
+      <td style="font-size:.72rem;color:var(--muted)">${e.count||1}×</td>
+      <td style="font-size:.72rem;color:var(--muted)">${e.lastTime ? new Date(e.lastTime).toLocaleString() : '—'}</td>
+    </tr>`;
+  }).join('');
+  el.innerHTML = mkSection('Events', evts.length, `<table><thead><tr><th>Type</th><th>Reason</th><th>Object</th><th>Message</th><th>Count</th><th>Last Seen</th></tr></thead><tbody>${rows}</tbody></table>`);
+}
+
+async function renderJobs(el) {
+  const jobs = await apiFetch(`/namespaces/${currentNs}/jobs`);
+  if (!jobs.length) { el.innerHTML = `<div class="empty">No jobs in ${currentNs}</div>`; return; }
+  const rows = jobs.map(j => {
+    const done = j.succeeded > 0 && j.active === 0 && j.failed === 0;
+    const failed = j.failed > 0;
+    const badge = done ? "<span class='tag tag-green'>Complete</span>"
+                : failed ? "<span class='tag tag-warn'>Failed</span>"
+                : "<span class='tag tag-blue'>Active</span>";
+    return `<tr>
+      <td class="mono">${j.name}</td>
+      <td>${badge}</td>
+      <td>${j.succeeded}/${j.completions??'?'}</td>
+      <td>${j.failed}</td>
+      <td>${j.active}</td>
+      <td style="font-size:.72rem;color:var(--muted)">${j.startTime ? new Date(j.startTime).toLocaleString() : '—'}</td>
+    </tr>`;
+  }).join('');
+  el.innerHTML = mkSection('Jobs', jobs.length, `<table><thead><tr><th>Name</th><th>Status</th><th>Succeeded</th><th>Failed</th><th>Active</th><th>Started</th></tr></thead><tbody>${rows}</tbody></table>`);
+}
+
+async function renderCronjobs(el) {
+  const cjs = await apiFetch(`/namespaces/${currentNs}/cronjobs`);
+  if (!cjs.length) { el.innerHTML = `<div class="empty">No CronJobs in ${currentNs}</div>`; return; }
+  const rows = cjs.map(c => `<tr>
+    <td class="mono">${c.name}</td>
+    <td class="mono">${c.schedule||'—'}</td>
+    <td>${c.suspend ? "<span class='tag tag-warn'>Suspended</span>" : "<span class='tag tag-green'>Active</span>"}</td>
+    <td>${c.activeJobs}</td>
+    <td style="font-size:.72rem;color:var(--muted)">${c.lastScheduleTime ? new Date(c.lastScheduleTime).toLocaleString() : '—'}</td>
+    <td style="font-size:.72rem;color:var(--muted)">${c.lastSuccessTime ? new Date(c.lastSuccessTime).toLocaleString() : '—'}</td>
+  </tr>`).join('');
+  el.innerHTML = mkSection('CronJobs', cjs.length, `<table><thead><tr><th>Name</th><th>Schedule</th><th>Status</th><th>Active</th><th>Last Schedule</th><th>Last Success</th></tr></thead><tbody>${rows}</tbody></table>`);
+}
+
+async function renderHpa(el) {
+  const hpas = await apiFetch(`/namespaces/${currentNs}/hpa`);
+  if (!hpas.length) { el.innerHTML = `<div class="empty">No HPAs in ${currentNs}</div>`; return; }
+  const rows = hpas.map(h => {
+    const atMax = h.currentReplicas >= h.maxReplicas;
+    const badge = atMax ? "<span class='tag tag-warn'>At Max</span>" : "<span class='tag tag-green'>OK</span>";
+    return `<tr>
+      <td class="mono">${h.name}</td>
+      <td class="mono">${h.targetKind||''}/${h.target||'—'}</td>
+      <td>${h.minReplicas??'—'} – ${h.maxReplicas??'—'}</td>
+      <td>${h.currentReplicas??'—'} / ${h.desiredReplicas??'—'}</td>
+      <td>${badge}</td>
+    </tr>`;
+  }).join('');
+  el.innerHTML = mkSection('Horizontal Pod Autoscalers', hpas.length, `<table><thead><tr><th>Name</th><th>Target</th><th>Min–Max</th><th>Current / Desired</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>`);
+}
+
+async function renderResourcequotas(el) {
+  const rqs = await apiFetch(`/namespaces/${currentNs}/resourcequotas`);
+  if (!rqs.length) { el.innerHTML = `<div class="empty">No resource quotas in ${currentNs}</div>`; return; }
+  const tables = rqs.map(rq => {
+    const keys = Object.keys(rq.hard || {});
+    const rows = keys.map(k => {
+      const hard = rq.hard?.[k] ?? '—';
+      const used = rq.used?.[k] ?? '—';
+      return `<tr><td class="mono">${k}</td><td>${used}</td><td>${hard}</td></tr>`;
+    }).join('');
+    return `<h3 style="margin:.75rem 0 .25rem;font-size:.85rem">${rq.name}</h3>
+      <table><thead><tr><th>Resource</th><th>Used</th><th>Hard Limit</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }).join('');
+  el.innerHTML = `<div class="section"><div class="section-header"><span>Resource Quotas</span><span class="count">${rqs.length}</span></div>${tables}</div>`;
+}
+
+async function renderNetworkpolicies(el) {
+  const nps = await apiFetch(`/namespaces/${currentNs}/networkpolicies`);
+  if (!nps.length) { el.innerHTML = `<div class="empty">No network policies in ${currentNs}</div>`; return; }
+  const rows = nps.map(n => `<tr>
+    <td class="mono">${n.name}</td>
+    <td>${n.policyTypes?.join(', ')||'—'}</td>
+    <td>${n.podSelector ? JSON.stringify(n.podSelector) : '(all)'}</td>
+    <td>${n.ingressRules} ingress / ${n.egressRules} egress</td>
+  </tr>`).join('');
+  el.innerHTML = mkSection('Network Policies', nps.length, `<table><thead><tr><th>Name</th><th>Types</th><th>Pod Selector</th><th>Rules</th></tr></thead><tbody>${rows}</tbody></table>`);
+}
+
 // ── Log viewer ─────────────────────────────────────────────────────────────
-async function openLog(ns, pod) {
+async function openLog(ns, pod, resetContainer = true) {
   logTarget = { ns, pod };
   const tail = document.getElementById('log-tail-select').value;
-  document.getElementById('log-title').textContent = `${pod}  ·  ${ns}`;
+  const ctrSelect = document.getElementById('log-container-select');
+
+  // Populate container dropdown if opening a new pod
+  if (resetContainer) {
+    ctrSelect.innerHTML = '<option value="">all containers</option>';
+    try {
+      const pods = await apiFetch(`/namespaces/${ns}/pods`);
+      const podObj = pods.find(p => p.name === pod);
+      if (podObj && podObj.containers && podObj.containers.length > 1) {
+        podObj.containers.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.name;
+          opt.textContent = c.name;
+          ctrSelect.appendChild(opt);
+        });
+      }
+    } catch(_) {}
+  }
+
+  const container = ctrSelect.value;
+  document.getElementById('log-title').textContent = `${pod}  ·  ${ns}${container ? '  ·  ' + container : ''}`;
   document.getElementById('log-panel').classList.add('open');
   document.getElementById('log-body').innerHTML = '<div class="loader">Fetching logs</div>';
   document.getElementById('log-search').value = '';
   document.getElementById('log-line-count').textContent = '';
+
   try {
-    const text = await apiText(`/namespaces/${ns}/pods/${pod}/logs?tail=${tail}`);
-    rawLogLines = text.split('\n');
+    let text;
+    if (container) {
+      // Single container
+      text = await apiText(`/namespaces/${ns}/pods/${pod}/logs?container=${encodeURIComponent(container)}&tail=${tail}`);
+      rawLogLines = text.split('\n');
+    } else {
+      // All containers — fetch /logs/all and merge with headers
+      const allLogs = await apiFetch(`/namespaces/${ns}/pods/${pod}/logs/all?tail=${tail}`);
+      rawLogLines = [];
+      for (const [cname, clog] of Object.entries(allLogs)) {
+        rawLogLines.push(`▶ ── ${cname} ──`);
+        rawLogLines.push(...clog.split('\n'));
+        rawLogLines.push('');
+      }
+    }
     document.getElementById('log-line-count').textContent = `${rawLogLines.length} lines`;
     renderLogLines(rawLogLines, '');
   } catch(e) {
@@ -553,7 +750,7 @@ async function openLog(ns, pod) {
 }
 
 async function reloadLog() {
-  if (logTarget) openLog(logTarget.ns, logTarget.pod);
+  if (logTarget) openLog(logTarget.ns, logTarget.pod, false);
 }
 
 function renderLogLines(lines, filter) {
@@ -563,7 +760,8 @@ function renderLogLines(lines, filter) {
     const escaped = line.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     const ll = line.toLowerCase();
     let cls = '';
-    if (ll.includes('error') || ll.includes('exception') || ll.includes('fatal')) cls = 'hl-error';
+    if (line.startsWith('▶ ──')) cls = 'hl-info';
+    else if (ll.includes('error') || ll.includes('exception') || ll.includes('fatal')) cls = 'hl-error';
     else if (ll.includes('warn')) cls = 'hl-warn';
     else if (ll.includes('info') || ll.includes('started') || ll.includes('ready')) cls = 'hl-info';
     if (lf && !ll.includes(lf)) return '';

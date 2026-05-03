@@ -87,11 +87,34 @@ app.MapGet("/namespaces", async () =>
 app.MapGet("/namespaces/{ns}/pods", async (string ns) =>
 {
     var pods = await WithK8sRetryAsync(c => c.ListNamespacedPodAsync(ns));
-    return Results.Ok(pods.Items.Select(p => new {
-        name = p.Metadata.Name,
-        phase = p.Status?.Phase,
-        ready = p.Status?.ContainerStatuses?.All(s => s.Ready) ?? false,
-        restarts = p.Status?.ContainerStatuses?.Sum(s => s.RestartCount) ?? 0
+    return Results.Ok(pods.Items.Select(p => {
+        var statuses = p.Status?.ContainerStatuses ?? [];
+        var initStatuses = p.Status?.InitContainerStatuses ?? [];
+        var readyCount = statuses.Count(s => s.Ready);
+        var totalCount = statuses.Count;
+        return new {
+            name       = p.Metadata.Name,
+            phase      = p.Status?.Phase,
+            ready      = $"{readyCount}/{totalCount}",
+            restarts   = statuses.Sum(s => s.RestartCount),
+            containers = statuses.Select(s => new {
+                name     = s.Name,
+                ready    = s.Ready,
+                restarts = s.RestartCount,
+                image    = s.Image,
+                state    = s.State?.Running  != null ? "Running"  :
+                           s.State?.Waiting  != null ? $"Waiting({s.State.Waiting.Reason})"  :
+                           s.State?.Terminated != null ? $"Terminated({s.State.Terminated.Reason})" : "Unknown"
+            }),
+            initContainers = initStatuses.Select(s => new {
+                name     = s.Name,
+                ready    = s.Ready,
+                restarts = s.RestartCount,
+                state    = s.State?.Running  != null ? "Running"  :
+                           s.State?.Waiting  != null ? $"Waiting({s.State.Waiting.Reason})"  :
+                           s.State?.Terminated != null ? $"Terminated({s.State.Terminated.Reason})" : "Unknown"
+            })
+        };
     }));
 });
 
@@ -104,9 +127,10 @@ app.MapGet("/namespaces/{ns}/pods/{pod}/events", async (string ns, string pod) =
 });
 
 
-app.MapGet("/namespaces/{ns}/pods/{pod}/logs", async (string ns, string pod, int? tail = 200) =>
+app.MapGet("/namespaces/{ns}/pods/{pod}/logs", async (string ns, string pod, string? container = null, int? tail = 200) =>
 {
-    using var logStream = await WithK8sRetryAsync(c => c.ReadNamespacedPodLogAsync(pod, ns, tailLines: tail));
+    using var logStream = await WithK8sRetryAsync(c =>
+        c.ReadNamespacedPodLogAsync(pod, ns, container: container, tailLines: tail));
     string logText = string.Empty;
     if (logStream != null)
     {
@@ -114,6 +138,91 @@ app.MapGet("/namespaces/{ns}/pods/{pod}/logs", async (string ns, string pod, int
         logText = await reader.ReadToEndAsync();
     }
     return Results.Text(logText, "text/plain");
+});
+
+// Fetch logs from ALL containers in a pod, returned as a JSON map { containerName -> logText }
+app.MapGet("/namespaces/{ns}/pods/{pod}/logs/all", async (string ns, string pod, int? tail = 200) =>
+{
+    var podObj = await WithK8sRetryAsync(c => c.ReadNamespacedPodAsync(pod, ns));
+    var containerNames = podObj.Spec?.Containers?.Select(c => c.Name).ToList() ?? [];
+    var result = new Dictionary<string, string>();
+    foreach (var cname in containerNames)
+    {
+        try
+        {
+            using var logStream = await WithK8sRetryAsync(c =>
+                c.ReadNamespacedPodLogAsync(pod, ns, container: cname, tailLines: tail));
+            if (logStream != null)
+            {
+                using var reader = new StreamReader(logStream);
+                result[cname] = await reader.ReadToEndAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            result[cname] = $"[error fetching logs: {ex.Message}]";
+        }
+    }
+    return Results.Ok(result);
+});
+
+// Per-container logs via clean REST path: /namespaces/{ns}/pods/{pod}/containers/{container}/logs
+app.MapGet("/namespaces/{ns}/pods/{pod}/containers/{container}/logs", async (string ns, string pod, string container, int? tail = 200) =>
+{
+    try
+    {
+        using var logStream = await WithK8sRetryAsync(c =>
+            c.ReadNamespacedPodLogAsync(pod, ns, container: container, tailLines: tail));
+        string logText = string.Empty;
+        if (logStream != null)
+        {
+            using var reader = new StreamReader(logStream);
+            logText = await reader.ReadToEndAsync();
+        }
+        return Results.Text(logText, "text/plain");
+    }
+    catch (Exception ex)
+    {
+        return Results.NotFound(new { error = $"Could not fetch logs for container '{container}': {ex.Message}" });
+    }
+});
+
+// List containers in a pod
+app.MapGet("/namespaces/{ns}/pods/{pod}/containers", async (string ns, string pod) =>
+{
+    var podObj = await WithK8sRetryAsync(c => c.ReadNamespacedPodAsync(pod, ns));
+    var containers = podObj.Spec?.Containers?.Select(c => new {
+        name  = c.Name,
+        image = c.Image,
+        ports = c.Ports?.Select(p => new { p.ContainerPort, p.Protocol }),
+        resources = new {
+            requests = c.Resources?.Requests?.ToDictionary(kv => kv.Key, kv => kv.Value.ToString()),
+            limits   = c.Resources?.Limits?.ToDictionary(kv => kv.Key, kv => kv.Value.ToString())
+        }
+    }) ?? [];
+    var initContainers = podObj.Spec?.InitContainers?.Select(c => new {
+        name  = c.Name,
+        image = c.Image,
+        init  = true
+    }) ?? [];
+    var statuses = podObj.Status?.ContainerStatuses ?? [];
+    return Results.Ok(new {
+        pod        = pod,
+        @namespace = ns,
+        containers = containers.Select(c => new {
+            c.name, c.image, c.ports, c.resources,
+            status = statuses.FirstOrDefault(s => s.Name == c.name) is {} s ? new {
+                ready    = s.Ready,
+                restarts = s.RestartCount,
+                state    = s.State?.Running    != null ? "Running"
+                         : s.State?.Waiting    != null ? $"Waiting({s.State.Waiting.Reason})"
+                         : s.State?.Terminated != null ? $"Terminated({s.State.Terminated.Reason})"
+                         : "Unknown",
+                image = s.Image
+            } : null
+        }),
+        initContainers = initContainers
+    });
 });
 
 // Troubleshoot endpoint: aggregates pods, events and last logs for a deployment/service name
@@ -143,11 +252,15 @@ app.MapGet("/troubleshoot/service/{ns}/{name}", async (string ns, string name) =
             }
         }
         var lastLogLines = lastLogText.Split('\n').TakeLast(200);
+        var tStatuses = p.Status?.ContainerStatuses ?? [];
         result.Add(new {
             pod = podName,
             phase = p.Status?.Phase,
-            ready = p.Status?.ContainerStatuses?.All(s => s.Ready) ?? false,
-            restarts = p.Status?.ContainerStatuses?.Sum(s => s.RestartCount) ?? 0,
+            ready = $"{tStatuses.Count(s => s.Ready)}/{tStatuses.Count}",
+            restarts = tStatuses.Sum(s => s.RestartCount),
+            containers = tStatuses.Select(s => new {
+                name = s.Name, ready = s.Ready, restarts = s.RestartCount, image = s.Image
+            }),
             events = evts.Items.Select(e => new { e.Metadata.CreationTimestamp, e.Reason, e.Message, e.Type }),
             lastLog = lastLogLines
         });
@@ -175,6 +288,86 @@ app.MapGet("/metrics/nodes", async () =>
         labels = n.Metadata.Labels
     });
     return Results.Ok(nodeMetrics);
+});
+
+// List all nodes (summary)
+app.MapGet("/nodes", async () =>
+{
+    var nodes = await WithK8sRetryAsync(c => c.ListNodeAsync());
+    return Results.Ok(nodes.Items.Select(n => new {
+        name        = n.Metadata.Name,
+        ready       = n.Status?.Conditions?.FirstOrDefault(c => c.Type == "Ready")?.Status,
+        roles       = n.Metadata.Labels?
+                        .Where(l => l.Key.StartsWith("node-role.kubernetes.io/"))
+                        .Select(l => l.Key.Replace("node-role.kubernetes.io/", ""))
+                        .ToList(),
+        osImage     = n.Status?.NodeInfo?.OsImage,
+        kubeletVersion = n.Status?.NodeInfo?.KubeletVersion,
+        cpu         = n.Status?.Capacity != null && n.Status.Capacity.ContainsKey("cpu")    ? n.Status.Capacity["cpu"].ToString()    : null,
+        memory      = n.Status?.Capacity != null && n.Status.Capacity.ContainsKey("memory") ? n.Status.Capacity["memory"].ToString() : null
+    }));
+});
+
+// Full detail for a single node
+app.MapGet("/nodes/{name}", async (string name) =>
+{
+    var nodes = await WithK8sRetryAsync(c => c.ListNodeAsync());
+    var n = nodes.Items.FirstOrDefault(x => x.Metadata.Name == name);
+    if (n is null) return Results.NotFound(new { error = $"Node '{name}' not found" });
+
+    return Results.Ok(new {
+        name       = n.Metadata.Name,
+        uid        = n.Metadata.Uid,
+        createdAt  = n.Metadata.CreationTimestamp,
+        labels     = n.Metadata.Labels,
+        annotations = n.Metadata.Annotations,
+        roles      = n.Metadata.Labels?
+                        .Where(l => l.Key.StartsWith("node-role.kubernetes.io/"))
+                        .Select(l => l.Key.Replace("node-role.kubernetes.io/", ""))
+                        .ToList(),
+
+        // Node info
+        nodeInfo = new {
+            osImage          = n.Status?.NodeInfo?.OsImage,
+            operatingSystem  = n.Status?.NodeInfo?.OperatingSystem,
+            architecture     = n.Status?.NodeInfo?.Architecture,
+            kernelVersion    = n.Status?.NodeInfo?.KernelVersion,
+            containerRuntime = n.Status?.NodeInfo?.ContainerRuntimeVersion,
+            kubeletVersion   = n.Status?.NodeInfo?.KubeletVersion,
+            kubeProxyVersion = n.Status?.NodeInfo?.KubeProxyVersion
+        },
+
+        // Capacity & allocatable
+        capacity = n.Status?.Capacity?
+            .ToDictionary(kv => kv.Key, kv => kv.Value.ToString()),
+        allocatable = n.Status?.Allocatable?
+            .ToDictionary(kv => kv.Key, kv => kv.Value.ToString()),
+
+        // Conditions (Ready, MemoryPressure, DiskPressure, PIDPressure, NetworkUnavailable)
+        conditions = n.Status?.Conditions?.Select(c => new {
+            type    = c.Type,
+            status  = c.Status,
+            reason  = c.Reason,
+            message = c.Message,
+            lastTransitionTime = c.LastTransitionTime
+        }),
+
+        // Addresses (InternalIP, ExternalIP, Hostname)
+        addresses = n.Status?.Addresses?.Select(a => new {
+            type    = a.Type,
+            address = a.Address
+        }),
+
+        // Taints
+        taints = n.Spec?.Taints?.Select(t => new {
+            key    = t.Key,
+            value  = t.Value,
+            effect = t.Effect
+        }),
+
+        // Pods currently scheduled on this node (cross-namespace scan)
+        unschedulable = n.Spec?.Unschedulable ?? false
+    });
 });
 
 // Pod/container resource metrics endpoint
@@ -489,6 +682,182 @@ app.MapGet("/persistentvolumes", async () =>
         storageClass = pv.Spec?.StorageClassName,
         claimRef     = pv.Spec?.ClaimRef != null ? new { pv.Spec.ClaimRef.Name, pv.Spec.ClaimRef.NamespaceProperty } : null,
         reclaimPolicy= pv.Spec?.PersistentVolumeReclaimPolicy
+    }));
+});
+
+// ── Namespace-wide events ──────────────────────────────────────────────────
+app.MapGet("/namespaces/{ns}/events", async (string ns) =>
+{
+    var evts = await WithK8sRetryAsync(c => c.CoreV1.ListNamespacedEventAsync(ns));
+    return Results.Ok(evts.Items
+        .OrderByDescending(e => e.LastTimestamp ?? e.Metadata.CreationTimestamp)
+        .Select(e => new {
+            name       = e.Metadata.Name,
+            type       = e.Type,          // Normal / Warning
+            reason     = e.Reason,
+            message    = e.Message,
+            regarding  = new { kind = e.InvolvedObject.Kind, name = e.InvolvedObject.Name },
+            count      = e.Count,
+            firstTime  = e.FirstTimestamp,
+            lastTime   = e.LastTimestamp ?? e.Metadata.CreationTimestamp
+        }));
+});
+
+// ── Jobs ──────────────────────────────────────────────────────────────────
+app.MapGet("/namespaces/{ns}/jobs", async (string ns) =>
+{
+    var jobs = await WithK8sRetryAsync(c => c.ListNamespacedJobAsync(ns));
+    return Results.Ok(jobs.Items.Select(j => new {
+        name        = j.Metadata.Name,
+        completions = j.Spec?.Completions,
+        succeeded   = j.Status?.Succeeded ?? 0,
+        failed      = j.Status?.Failed ?? 0,
+        active      = j.Status?.Active ?? 0,
+        startTime   = j.Status?.StartTime,
+        completionTime = j.Status?.CompletionTime,
+        conditions  = j.Status?.Conditions?.Select(c => new { c.Type, c.Status, c.Reason, c.Message })
+    }));
+});
+
+app.MapGet("/namespaces/{ns}/jobs/{name}", async (string ns, string name) =>
+{
+    var jobs = await WithK8sRetryAsync(c => c.ListNamespacedJobAsync(ns));
+    var j = jobs.Items.FirstOrDefault(x => x.Metadata.Name == name);
+    if (j is null) return Results.NotFound(new { error = $"Job '{name}' not found" });
+    return Results.Ok(new {
+        name        = j.Metadata.Name,
+        labels      = j.Metadata.Labels,
+        completions = j.Spec?.Completions,
+        parallelism = j.Spec?.Parallelism,
+        succeeded   = j.Status?.Succeeded ?? 0,
+        failed      = j.Status?.Failed ?? 0,
+        active      = j.Status?.Active ?? 0,
+        startTime   = j.Status?.StartTime,
+        completionTime = j.Status?.CompletionTime,
+        conditions  = j.Status?.Conditions?.Select(c => new { c.Type, c.Status, c.Reason, c.Message }),
+        selector    = j.Spec?.Selector?.MatchLabels
+    });
+});
+
+// ── CronJobs ──────────────────────────────────────────────────────────────
+app.MapGet("/namespaces/{ns}/cronjobs", async (string ns) =>
+{
+    var cjs = await WithK8sRetryAsync(c => c.ListNamespacedCronJobAsync(ns));
+    return Results.Ok(cjs.Items.Select(cj => new {
+        name             = cj.Metadata.Name,
+        schedule         = cj.Spec?.Schedule,
+        suspend          = cj.Spec?.Suspend ?? false,
+        lastScheduleTime = cj.Status?.LastScheduleTime,
+        lastSuccessTime  = cj.Status?.LastSuccessfulTime,
+        activeJobs       = cj.Status?.Active?.Count ?? 0
+    }));
+});
+
+app.MapGet("/namespaces/{ns}/cronjobs/{name}", async (string ns, string name) =>
+{
+    var cjs = await WithK8sRetryAsync(c => c.ListNamespacedCronJobAsync(ns));
+    var cj = cjs.Items.FirstOrDefault(x => x.Metadata.Name == name);
+    if (cj is null) return Results.NotFound(new { error = $"CronJob '{name}' not found" });
+    return Results.Ok(new {
+        name             = cj.Metadata.Name,
+        labels           = cj.Metadata.Labels,
+        schedule         = cj.Spec?.Schedule,
+        suspend          = cj.Spec?.Suspend ?? false,
+        concurrencyPolicy= cj.Spec?.ConcurrencyPolicy,
+        successfulJobsLimit = cj.Spec?.SuccessfulJobsHistoryLimit,
+        failedJobsLimit  = cj.Spec?.FailedJobsHistoryLimit,
+        lastScheduleTime = cj.Status?.LastScheduleTime,
+        lastSuccessTime  = cj.Status?.LastSuccessfulTime,
+        activeJobs       = cj.Status?.Active?.Select(r => r.Name)
+    });
+});
+
+// ── HorizontalPodAutoscalers ───────────────────────────────────────────────
+app.MapGet("/namespaces/{ns}/hpa", async (string ns) =>
+{
+    var hpas = await WithK8sRetryAsync(c => c.AutoscalingV2.ListNamespacedHorizontalPodAutoscalerAsync(ns));
+    return Results.Ok(hpas.Items.Select(h => new {
+        name           = h.Metadata.Name,
+        target         = h.Spec?.ScaleTargetRef?.Name,
+        targetKind     = h.Spec?.ScaleTargetRef?.Kind,
+        minReplicas    = h.Spec?.MinReplicas,
+        maxReplicas    = h.Spec?.MaxReplicas,
+        currentReplicas= h.Status?.CurrentReplicas,
+        desiredReplicas= h.Status?.DesiredReplicas,
+        conditions     = h.Status?.Conditions?.Select(c => new { c.Type, c.Status, c.Reason, c.Message }),
+        metrics        = h.Status?.CurrentMetrics?.Select(m => new {
+            type   = m.Type,
+            cpu    = m.Resource?.Current?.AverageUtilization
+        })
+    }));
+});
+
+// ── ResourceQuotas ────────────────────────────────────────────────────────
+app.MapGet("/namespaces/{ns}/resourcequotas", async (string ns) =>
+{
+    var rqs = await WithK8sRetryAsync(c => c.ListNamespacedResourceQuotaAsync(ns));
+    return Results.Ok(rqs.Items.Select(rq => new {
+        name = rq.Metadata.Name,
+        hard = rq.Status?.Hard?.ToDictionary(kv => kv.Key, kv => kv.Value.ToString()),
+        used = rq.Status?.Used?.ToDictionary(kv => kv.Key, kv => kv.Value.ToString())
+    }));
+});
+
+// ── LimitRanges ───────────────────────────────────────────────────────────
+app.MapGet("/namespaces/{ns}/limitranges", async (string ns) =>
+{
+    var lrs = await WithK8sRetryAsync(c => c.ListNamespacedLimitRangeAsync(ns));
+    return Results.Ok(lrs.Items.Select(lr => new {
+        name   = lr.Metadata.Name,
+        limits = lr.Spec?.Limits?.Select(l => new {
+            type           = l.Type,
+            max            = l.Max?.ToDictionary(kv => kv.Key, kv => kv.Value.ToString()),
+            min            = l.Min?.ToDictionary(kv => kv.Key, kv => kv.Value.ToString()),
+            defaultLimit   = l.DefaultProperty?.ToDictionary(kv => kv.Key, kv => kv.Value.ToString()),
+            defaultRequest = l.DefaultRequest?.ToDictionary(kv => kv.Key, kv => kv.Value.ToString())
+        })
+    }));
+});
+
+// ── NetworkPolicies ───────────────────────────────────────────────────────
+app.MapGet("/namespaces/{ns}/networkpolicies", async (string ns) =>
+{
+    var nps = await WithK8sRetryAsync(c => c.NetworkingV1.ListNamespacedNetworkPolicyAsync(ns));
+    return Results.Ok(nps.Items.Select(np => new {
+        name        = np.Metadata.Name,
+        podSelector = np.Spec?.PodSelector?.MatchLabels,
+        policyTypes = np.Spec?.PolicyTypes,
+        ingressRules= np.Spec?.Ingress?.Count ?? 0,
+        egressRules = np.Spec?.Egress?.Count ?? 0
+    }));
+});
+
+// ── StorageClasses ────────────────────────────────────────────────────────
+app.MapGet("/storageclasses", async () =>
+{
+    var scs = await WithK8sRetryAsync(c => c.ListStorageClassAsync());
+    return Results.Ok(scs.Items.Select(sc => new {
+        name              = sc.Metadata.Name,
+        provisioner       = sc.Provisioner,
+        reclaimPolicy     = sc.ReclaimPolicy,
+        volumeBindingMode = sc.VolumeBindingMode,
+        allowExpansion    = sc.AllowVolumeExpansion ?? false,
+        isDefault         = sc.Metadata.Annotations != null &&
+                            sc.Metadata.Annotations.TryGetValue("storageclass.kubernetes.io/is-default-class", out var v) && v == "true"
+    }));
+});
+
+// ── ReplicaSets (rollout history) ─────────────────────────────────────────
+app.MapGet("/namespaces/{ns}/replicasets", async (string ns) =>
+{
+    var rss = await WithK8sRetryAsync(c => c.ListNamespacedReplicaSetAsync(ns));
+    return Results.Ok(rss.Items.Select(rs => new {
+        name       = rs.Metadata.Name,
+        deployment = rs.Metadata.OwnerReferences?.FirstOrDefault(o => o.Kind == "Deployment")?.Name,
+        replicas   = rs.Spec?.Replicas ?? 0,
+        ready      = rs.Status?.ReadyReplicas ?? 0,
+        image      = rs.Spec?.Template?.Spec?.Containers?.FirstOrDefault()?.Image,
+        createdAt  = rs.Metadata.CreationTimestamp
     }));
 });
 
