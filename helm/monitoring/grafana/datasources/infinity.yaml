@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+
+metadata:
+  name: grafana-datasource-infinity
+  namespace: monitoring
+
+  labels:
+    grafana_datasource: "1"
+
+data:
+  infinity.yaml: |
+    apiVersion: 1
+
+    datasources:
+      - name: Infinity
+        uid: infinity
+        type: yesoreyeram-infinity-datasource
+        access: proxy
+        isDefault: false
+        editable: false
