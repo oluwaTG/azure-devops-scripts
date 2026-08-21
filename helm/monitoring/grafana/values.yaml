@@ -1,0 +1,44 @@
+kube-prometheus-stack:
+  grafana:
+    enabled: true
+
+    service:
+      type: ClusterIP
+
+    image:
+      repository: grafana/grafana
+      tag: 12.1.1
+
+    grafana.ini:
+      plugins:
+        allow_loading_unsigned_plugins: yesoreyeram-infinity-datasource
+
+    plugins:
+      - yesoreyeram-infinity-datasource
+
+    sidecar:
+      dashboards:
+        enabled: true
+        label: grafana_dashboard
+        labelValue: "1"
+        searchNamespace: ALL
+        provider:
+          allowUiUpdates: false
+          disableDelete: false
+
+      datasources:
+        enabled: true
+        label: grafana_datasource
+        labelValue: "1"
+        searchNamespace: ALL
+        defaultDatasourceEnabled: true
+
+  prometheus:
+    prometheusSpec:
+      retention: 3d
+      serviceMonitorSelectorNilUsesHelmValues: false
+      serviceMonitorNamespaceSelector:
+        any: true
+
+  alertmanager:
+    enabled: true

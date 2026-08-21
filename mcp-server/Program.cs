@@ -2,9 +2,10 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Collections.Generic;
+using System.Security.Cryptography.X509Certificates;
 using k8s;
-using Microsoft.Extensions.Caching.Memory;
 using k8s.Models;
+using Microsoft.Extensions.Caching.Memory;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddMemoryCache();
@@ -12,57 +13,242 @@ builder.Services.AddEndpointsApiExplorer();
 
 var app = builder.Build();
 
-Kubernetes CreateK8sClient()
+// ── Cluster Registry ─────────────────────────────────────────────────────────
+// "local"  = the in-cluster SA or default kubeconfig context (always present).
+// Any name = a remote cluster registered via POST /clusters, persisted as a
+//            Secret labelled mcp.io/cluster-type=remote in the MCP namespace.
+// All existing endpoints automatically gain ?cluster=<name> routing via middleware.
+// ─────────────────────────────────────────────────────────────────────────────
+
+string GetMcpNamespace()
 {
-    try
-    {
-        return new Kubernetes(KubernetesClientConfiguration.InClusterConfig());
-    }
-    catch
-    {
-        return new Kubernetes(KubernetesClientConfiguration.BuildConfigFromConfigFile());
-    }
+    var env = Environment.GetEnvironmentVariable("MCP_NAMESPACE");
+    if (!string.IsNullOrWhiteSpace(env)) return env;
+    const string nsFile = "/var/run/secrets/kubernetes.io/serviceaccount/namespace";
+    if (File.Exists(nsFile)) return File.ReadAllText(nsFile).Trim();
+    return "default";
 }
 
-var k8s = CreateK8sClient();
+Kubernetes CreateLocalClient()
+{
+    try   { return new Kubernetes(KubernetesClientConfiguration.InClusterConfig()); }
+    catch { return new Kubernetes(KubernetesClientConfiguration.BuildConfigFromConfigFile()); }
+}
+
+Kubernetes CreateRemoteClient(string server, string caData, string token)
+{
+    var cfg = new KubernetesClientConfiguration
+    {
+        Host        = server,
+        AccessToken = token,
+    };
+    if (!string.IsNullOrWhiteSpace(caData))
+        cfg.SslCaCerts = new X509Certificate2Collection
+            { new X509Certificate2(Convert.FromBase64String(caData)) };
+    else
+        cfg.SkipTlsVerify = true;   // no CA provided — skip TLS (dev/test only)
+
+    return new Kubernetes(cfg);
+}
+
+var mcpNamespace = GetMcpNamespace();
+
+// Thread-safe registry: cluster name → Kubernetes client
+var clusterRegistry = new Dictionary<string, Kubernetes>(StringComparer.OrdinalIgnoreCase)
+{
+    ["local"] = CreateLocalClient()
+};
+
+// On startup, re-hydrate any cluster Secrets that were persisted in earlier runs.
+try
+{
+    var stored = clusterRegistry["local"]
+        .ListNamespacedSecretAsync(mcpNamespace, labelSelector: "mcp.io/cluster-type=remote")
+        .GetAwaiter().GetResult();
+
+    foreach (var s in stored.Items)
+    {
+        try
+        {
+            var name   = s.Metadata.Labels["mcp.io/cluster-name"];
+            var server = System.Text.Encoding.UTF8.GetString(s.Data["server"]);
+            var ca     = s.Data.ContainsKey("caData")
+                           ? System.Text.Encoding.UTF8.GetString(s.Data["caData"]) : "";
+            var tok    = System.Text.Encoding.UTF8.GetString(s.Data["token"]);
+            clusterRegistry[name] = CreateRemoteClient(server, ca, tok);
+            Console.WriteLine($"[MCP] Loaded cluster '{name}' from secret.");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[MCP] Skipping bad cluster secret '{s.Metadata.Name}': {ex.Message}");
+        }
+    }
+}
+catch (Exception ex)
+{
+    // First deploy: Secret permission may not exist yet — harmless warning.
+    Console.WriteLine($"[MCP] Could not scan cluster secrets at startup: {ex.Message}");
+}
+
 var cache = app.Services.GetRequiredService<IMemoryCache>();
 
-// Recreates the k8s client if the connection has dropped (fixes SSL NullReferenceException after idle)
+// Per-request routing: set by the middleware below from the ?cluster= query param.
+var currentCluster = new AsyncLocal<string?>();
+
+Kubernetes GetClient() =>
+    clusterRegistry.TryGetValue(currentCluster.Value ?? "local", out var client)
+        ? client
+        : throw new InvalidOperationException(
+            $"Cluster '{currentCluster.Value}' is not registered. " +
+            "Use GET /clusters to list available clusters or POST /clusters to register one.");
+
+// Middleware: reads ?cluster= from every request, sets currentCluster for the duration.
+// Zero changes required to any existing endpoint handler.
+app.Use(async (ctx, next) =>
+{
+    currentCluster.Value = ctx.Request.Query["cluster"].FirstOrDefault();
+    await next();
+    currentCluster.Value = null;
+});
+
+// Recreates the local client on connection drop; remote clients are just re-used.
 T WithK8sRetry<T>(Func<Kubernetes, T> action)
 {
-    try
-    {
-        return action(k8s);
-    }
+    var c = GetClient();
+    try { return action(c); }
     catch (Exception ex) when (
         ex is System.Net.Http.HttpRequestException ||
         ex is NullReferenceException ||
         (ex.InnerException is NullReferenceException) ||
         (ex.InnerException is System.Net.Http.HttpRequestException))
     {
-        k8s = CreateK8sClient();
-        return action(k8s);
+        if (string.IsNullOrEmpty(currentCluster.Value))
+            clusterRegistry["local"] = CreateLocalClient();
+        return action(GetClient());
     }
 }
 
 async Task<T> WithK8sRetryAsync<T>(Func<Kubernetes, Task<T>> action)
 {
-    try
-    {
-        return await action(k8s);
-    }
+    var c = GetClient();
+    try { return await action(c); }
     catch (Exception ex) when (
         ex is System.Net.Http.HttpRequestException ||
         ex is NullReferenceException ||
         (ex.InnerException is NullReferenceException) ||
         (ex.InnerException is System.Net.Http.HttpRequestException))
     {
-        k8s = CreateK8sClient();
-        return await action(k8s);
+        if (string.IsNullOrEmpty(currentCluster.Value))
+            clusterRegistry["local"] = CreateLocalClient();
+        return await action(GetClient());
     }
 }
 
-app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+// ── Cluster management endpoints ─────────────────────────────────────────────
+
+app.MapGet("/health", () => Results.Ok(new { status = "ok", service = "kuberniq-server" }));
+
+// List all registered clusters
+app.MapGet("/clusters", () =>
+{
+    var result = clusterRegistry.Keys.Select(name => new
+    {
+        name,
+        isLocal = name.Equals("local", StringComparison.OrdinalIgnoreCase)
+    });
+    return Results.Ok(result);
+});
+
+// Register a new remote cluster.
+// Body: { "name": "prod", "server": "https://...", "caData": "<base64>", "token": "<sa-token>" }
+// All fields except caData are required. caData can be omitted to skip TLS verification.
+app.MapPost("/clusters", async (RegisterClusterRequest req) =>
+{
+    if (string.IsNullOrWhiteSpace(req.Name))
+        return Results.BadRequest(new { error = "name is required" });
+    if (string.IsNullOrWhiteSpace(req.Server))
+        return Results.BadRequest(new { error = "server is required" });
+    if (string.IsNullOrWhiteSpace(req.Token))
+        return Results.BadRequest(new { error = "token is required" });
+    if (req.Name.Equals("local", StringComparison.OrdinalIgnoreCase))
+        return Results.BadRequest(new { error = "'local' is reserved for the in-cluster client" });
+
+    // 1. Build the client and do a quick connectivity check
+    Kubernetes remoteClient;
+    try
+    {
+        remoteClient = CreateRemoteClient(req.Server, req.CaData ?? "", req.Token);
+        await remoteClient.ListNamespaceAsync();   // throws on auth / network failure
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { error = $"Could not connect to '{req.Name}': {ex.Message}" });
+    }
+
+    // 2. Persist as a Secret so the cluster survives MCP server restarts
+    var secretName = $"mcp-cluster-{req.Name.ToLowerInvariant().Replace(" ", "-")}";
+    try
+    {
+        var secret = new V1Secret
+        {
+            Metadata = new V1ObjectMeta
+            {
+                Name               = secretName,
+                NamespaceProperty  = mcpNamespace,
+                Labels             = new Dictionary<string, string>
+                {
+                    ["mcp.io/cluster-type"] = "remote",
+                    ["mcp.io/cluster-name"] = req.Name
+                }
+            },
+            StringData = new Dictionary<string, string>
+            {
+                ["server"] = req.Server,
+                ["caData"] = req.CaData ?? "",
+                ["token"]  = req.Token
+            }
+        };
+
+        // Upsert: silently replace if it already exists
+        try { await clusterRegistry["local"].DeleteNamespacedSecretAsync(secretName, mcpNamespace); }
+        catch { /* did not exist */ }
+        await clusterRegistry["local"].CreateNamespacedSecretAsync(secret, mcpNamespace);
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[MCP] Warning: could not persist secret for '{req.Name}': {ex.Message}");
+        // Still register in-memory so the cluster works for this session
+    }
+
+    // 3. Hot-register the client — immediately available to all endpoints
+    clusterRegistry[req.Name] = remoteClient;
+    Console.WriteLine($"[MCP] Registered cluster '{req.Name}' → {req.Server}");
+
+    return Results.Ok(new { registered = req.Name, server = req.Server,
+                            hint = $"Append ?cluster={req.Name} to any endpoint." });
+});
+
+// Remove a registered remote cluster
+app.MapDelete("/clusters/{name}", async (string name) =>
+{
+    if (name.Equals("local", StringComparison.OrdinalIgnoreCase))
+        return Results.BadRequest(new { error = "Cannot remove the local cluster" });
+
+    clusterRegistry.Remove(name);
+
+    // Delete the persisted Secret so it isn't re-loaded on restart
+    try
+    {
+        var secretName = $"mcp-cluster-{name.ToLowerInvariant().Replace(" ", "-")}";
+        await clusterRegistry["local"].DeleteNamespacedSecretAsync(secretName, mcpNamespace);
+    }
+    catch { /* Secret may not exist */ }
+
+    return Results.Ok(new { removed = name });
+});
+
+// DTO for POST /clusters
+record RegisterClusterRequest(string Name, string Server, string? CaData, string Token);
 
 app.MapGet("/cluster/info", async () =>
 {

@@ -1,0 +1,117 @@
+name: Release kuberniq
+
+on:
+  push:
+    tags:
+      - "kuberniq/v*"   # trigger with: git tag kuberniq/v1.0.0 && git push --tags
+
+permissions:
+  contents: write   # needed to create GitHub Releases
+
+jobs:
+  # ── Build a binary for each platform in parallel ────────────────────────────
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest   # Apple Silicon (M-series)
+            rid: osx-arm64
+            binary: kuberniq
+
+          - os: macos-13       # Intel Mac
+            rid: osx-x64
+            binary: kuberniq
+
+          - os: ubuntu-latest
+            rid: linux-x64
+            binary: kuberniq
+
+          - os: ubuntu-24.04-arm   # native ARM64 runner
+            rid: linux-arm64
+            binary: kuberniq
+
+          - os: windows-latest
+            rid: win-x64
+            binary: kuberniq.exe
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Publish self-contained binary
+        run: >
+          dotnet publish kuberniq/kuberniq.csproj
+          -r ${{ matrix.rid }}
+          -c Release
+          -o dist/${{ matrix.rid }}
+
+      # Rename to include the RID so all files have unique names in the release
+      - name: Rename binary
+        shell: bash
+        run: |
+          src="dist/${{ matrix.rid }}/${{ matrix.binary }}"
+          if [[ "${{ matrix.rid }}" == win-* ]]; then
+            dst="dist/kuberniq-${{ matrix.rid }}.exe"
+          else
+            dst="dist/kuberniq-${{ matrix.rid }}"
+          fi
+          mv "$src" "$dst"
+          echo "ASSET=$dst" >> "$GITHUB_ENV"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kuberniq-${{ matrix.rid }}
+          path: ${{ env.ASSET }}
+
+  # ── Combine artifacts and publish a GitHub Release ──────────────────────────
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "kuberniq ${{ github.ref_name }}"
+          body: |
+            ## Install
+
+            **macOS / Linux — one-liner:**
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/oluwaTG/azure-devops-scripts/main/kuberniq/install.sh | bash
+            ```
+
+            **Windows** — download `kuberniq-win-x64.exe` below, rename it to `kuberniq.exe`, and add its folder to `PATH`.
+
+            ---
+
+            ### Manual download
+
+            | Platform | Binary |
+            |---|---|
+            | macOS Apple Silicon | `kuberniq-osx-arm64` |
+            | macOS Intel         | `kuberniq-osx-x64`   |
+            | Linux x64           | `kuberniq-linux-x64`  |
+            | Linux ARM64         | `kuberniq-linux-arm64`|
+            | Windows x64         | `kuberniq-win-x64.exe`|
+
+            ---
+
+            ### What's included
+            Self-contained binary — **no .NET runtime required**.
+          files: artifacts/*
