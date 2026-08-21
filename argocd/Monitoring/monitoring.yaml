@@ -3,17 +3,32 @@ kind: Application
 metadata:
   name: monitoring
   namespace: argocd
+
 spec:
   project: default
 
-  source:
-    repoURL: https://github.com/oluwaTG/azure-devops-scripts.git
-    targetRevision: main
-    path: helm/monitoring
-    helm:
-      skipCrds: true
-      valueFiles:
-        - grafana/values.yaml
+  sources:
+
+    # ---------------------------------------------------------
+    # kube-prometheus-stack Helm chart
+    # ---------------------------------------------------------
+    - repoURL: https://github.com/oluwaTG/azure-devops-scripts.git
+      targetRevision: main
+      path: helm/monitoring
+      helm:
+        skipCrds: true
+        valueFiles:
+          - grafana/values.yaml
+
+    # ---------------------------------------------------------
+    # Grafana GitOps resources
+    # ---------------------------------------------------------
+    - repoURL: https://github.com/oluwaTG/azure-devops-scripts.git
+      targetRevision: main
+      path: helm/monitoring/grafana
+      directory:
+        recurse: true
+        include: '{datasources/*.yaml,dashboards/*.yaml}'
 
   destination:
     server: https://kubernetes.default.svc
@@ -23,6 +38,7 @@ spec:
     automated:
       prune: true
       selfHeal: true
+
     syncOptions:
       - CreateNamespace=true
-      - server-side-apply=true
+      - ServerSideApply=true
