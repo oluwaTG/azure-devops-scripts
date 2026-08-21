@@ -43,4 +43,4 @@ kube-prometheus-stack:
         any: true
 
   alertmanager:
-    enabled: true
+    enabled: false
