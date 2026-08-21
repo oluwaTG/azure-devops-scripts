@@ -1,18 +1,14 @@
 kube-prometheus-stack:
   grafana:
     enabled: true
-
     service:
       type: ClusterIP
-
     image:
       repository: grafana/grafana
       tag: 12.1.1
-
     grafana.ini:
       plugins:
         allow_loading_unsigned_plugins: yesoreyeram-infinity-datasource
-
     plugins:
       - yesoreyeram-infinity-datasource
 
@@ -32,6 +28,12 @@ kube-prometheus-stack:
         labelValue: "1"
         searchNamespace: ALL
         defaultDatasourceEnabled: true
+  
+  defaultRules:
+    create: true
+    rules:
+      alertmanager: false
+      configReloaders: false
 
   prometheus:
     prometheusSpec:
