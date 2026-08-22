@@ -52,13 +52,6 @@ data:
           },
           "targets": [
             {
-              "columns": [
-                {
-                  "selector": "temperature_2m",
-                  "text": "Temperature",
-                  "type": "number"
-                }
-              ],
               "datasource": {
                 "type": "yesoreyeram-infinity-datasource",
                 "uid": "infinity"
@@ -68,15 +61,22 @@ data:
               "global_query_id": "",
               "parser": "backend",
               "refId": "A",
-              "root_selector": "[$.current]",
+              "root_selector": "$.features[0].properties",
               "source": "url",
               "type": "json",
-              "url": "https://api.open-meteo.com/v1/forecast?latitude=52.5862&longitude=-2.1288&current=temperature_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&hourly=temperature_2m,precipitation_probability&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset&timezone=Europe%2FLondon&forecast_days=7&forecast_hours=24&wind_speed_unit=mph",
+              "url": "https://data.hub.api.metoffice.gov.uk/sitespecific/v0/point/hourly?latitude=52.5862&longitude=-2.1288",
               "url_options": {
                 "data": "",
                 "method": "GET",
                 "params": []
-              }
+              },
+              "columns": [
+                {
+                  "selector": "temperature",
+                  "text": "Temperature",
+                  "type": "number"
+                }
+              ]
             }
           ]
         },
@@ -116,13 +116,6 @@ data:
           },
           "targets": [
             {
-              "columns": [
-                {
-                  "selector": "temperature_2m",
-                  "text": "Temperature",
-                  "type": "number"
-                }
-              ],
               "datasource": {
                 "type": "yesoreyeram-infinity-datasource",
                 "uid": "infinity"
@@ -132,15 +125,22 @@ data:
               "global_query_id": "",
               "parser": "backend",
               "refId": "A",
-              "root_selector": "[$.current]",
+              "root_selector": "$.features[0].properties",
               "source": "url",
               "type": "json",
-              "url": "https://api.open-meteo.com/v1/forecast?latitude=52.4862&longitude=-1.8904&current=temperature_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&hourly=temperature_2m,precipitation_probability&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset&timezone=Europe%2FLondon&forecast_days=7&forecast_hours=24&wind_speed_unit=mph",
+              "url": "https://data.hub.api.metoffice.gov.uk/sitespecific/v0/point/hourly?latitude=52.4862&longitude=-1.8904",
               "url_options": {
                 "data": "",
                 "method": "GET",
                 "params": []
-              }
+              },
+              "columns": [
+                {
+                  "selector": "temperature",
+                  "text": "Temperature",
+                  "type": "number"
+                }
+              ]
             }
           ]
         },
@@ -180,13 +180,6 @@ data:
           },
           "targets": [
             {
-              "columns": [
-                {
-                  "selector": "temperature_2m",
-                  "text": "Temperature",
-                  "type": "number"
-                }
-              ],
               "datasource": {
                 "type": "yesoreyeram-infinity-datasource",
                 "uid": "infinity"
@@ -196,15 +189,22 @@ data:
               "global_query_id": "",
               "parser": "backend",
               "refId": "A",
-              "root_selector": "[$.current]",
+              "root_selector": "$.features[0].properties",
               "source": "url",
               "type": "json",
-              "url": "https://api.open-meteo.com/v1/forecast?latitude=53.4808&longitude=-2.2426&current=temperature_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&hourly=temperature_2m,precipitation_probability&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset&timezone=Europe%2FLondon&forecast_days=7&forecast_hours=24&wind_speed_unit=mph",
+              "url": "https://data.hub.api.metoffice.gov.uk/sitespecific/v0/point/hourly?latitude=53.4808&longitude=-2.2426",
               "url_options": {
                 "data": "",
                 "method": "GET",
                 "params": []
-              }
+              },
+              "columns": [
+                {
+                  "selector": "temperature",
+                  "text": "Temperature",
+                  "type": "number"
+                }
+              ]
             }
           ]
         },
@@ -244,13 +244,6 @@ data:
           },
           "targets": [
             {
-              "columns": [
-                {
-                  "selector": "apparent_temperature",
-                  "text": "Feels Like",
-                  "type": "number"
-                }
-              ],
               "datasource": {
                 "type": "yesoreyeram-infinity-datasource",
                 "uid": "infinity"
@@ -260,20 +253,91 @@ data:
               "global_query_id": "",
               "parser": "backend",
               "refId": "A",
-              "root_selector": "[$.current]",
+              "root_selector": "$.features[0].properties",
               "source": "url",
               "type": "json",
-              "url": "https://api.open-meteo.com/v1/forecast?latitude=52.5862&longitude=-2.1288&current=temperature_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&hourly=temperature_2m,precipitation_probability&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset&timezone=Europe%2FLondon&forecast_days=7&forecast_hours=24&wind_speed_unit=mph",
+              "url": "https://data.hub.api.metoffice.gov.uk/sitespecific/v0/point/hourly?latitude=52.5862&longitude=-2.1288",
               "url_options": {
                 "data": "",
                 "method": "GET",
                 "params": []
-              }
+              },
+              "columns": [
+                {
+                  "selector": "feelsLikeTemperature",
+                  "text": "Feels Like",
+                  "type": "number"
+                }
+              ]
             }
           ]
         },
         {
           "id": 5,
+          "type": "stat",
+          "title": "Rain Probability",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "infinity"
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 6,
+            "x": 6,
+            "y": 5
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent"
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "values": false,
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": ""
+            },
+            "orientation": "auto",
+            "textMode": "value_and_name",
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "auto"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "yesoreyeram-infinity-datasource",
+                "uid": "infinity"
+              },
+              "filters": [],
+              "format": "table",
+              "global_query_id": "",
+              "parser": "backend",
+              "refId": "A",
+              "root_selector": "$.features[0].properties",
+              "source": "url",
+              "type": "json",
+              "url": "https://data.hub.api.metoffice.gov.uk/sitespecific/v0/point/hourly?latitude=52.5862&longitude=-2.1288",
+              "url_options": {
+                "data": "",
+                "method": "GET",
+                "params": []
+              },
+              "columns": [
+                {
+                  "selector": "probOfPrecipitation",
+                  "text": "Rain Chance",
+                  "type": "number"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": 6,
           "type": "stat",
           "title": "Wind Speed",
           "datasource": {
@@ -283,7 +347,7 @@ data:
           "gridPos": {
             "h": 5,
             "w": 6,
-            "x": 6,
+            "x": 12,
             "y": 5
           },
           "fieldConfig": {
@@ -308,102 +372,38 @@ data:
           },
           "targets": [
             {
+              "datasource": {
+                "type": "yesoreyeram-infinity-datasource",
+                "uid": "infinity"
+              },
+              "filters": [],
+              "format": "table",
+              "global_query_id": "",
+              "parser": "backend",
+              "refId": "A",
+              "root_selector": "$.features[0].properties",
+              "source": "url",
+              "type": "json",
+              "url": "https://data.hub.api.metoffice.gov.uk/sitespecific/v0/point/hourly?latitude=52.5862&longitude=-2.1288",
+              "url_options": {
+                "data": "",
+                "method": "GET",
+                "params": []
+              },
               "columns": [
                 {
-                  "selector": "wind_speed_10m",
+                  "selector": "windSpeed10m",
                   "text": "Wind",
                   "type": "number"
                 }
-              ],
-              "datasource": {
-                "type": "yesoreyeram-infinity-datasource",
-                "uid": "infinity"
-              },
-              "filters": [],
-              "format": "table",
-              "global_query_id": "",
-              "parser": "backend",
-              "refId": "A",
-              "root_selector": "[$.current]",
-              "source": "url",
-              "type": "json",
-              "url": "https://api.open-meteo.com/v1/forecast?latitude=52.5862&longitude=-2.1288&current=temperature_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&hourly=temperature_2m,precipitation_probability&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset&timezone=Europe%2FLondon&forecast_days=7&forecast_hours=24&wind_speed_unit=mph",
-              "url_options": {
-                "data": "",
-                "method": "GET",
-                "params": []
-              }
-            }
-          ]
-        },
-        {
-          "id": 6,
-          "type": "stat",
-          "title": "Precipitation",
-          "datasource": {
-            "type": "yesoreyeram-infinity-datasource",
-            "uid": "infinity"
-          },
-          "gridPos": {
-            "h": 5,
-            "w": 6,
-            "x": 12,
-            "y": 5
-          },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "lengthmm"
-            },
-            "overrides": []
-          },
-          "options": {
-            "reduceOptions": {
-              "values": false,
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": ""
-            },
-            "orientation": "auto",
-            "textMode": "value_and_name",
-            "colorMode": "value",
-            "graphMode": "area",
-            "justifyMode": "auto"
-          },
-          "targets": [
-            {
-              "columns": [
-                {
-                  "selector": "precipitation",
-                  "text": "Rain",
-                  "type": "number"
-                }
-              ],
-              "datasource": {
-                "type": "yesoreyeram-infinity-datasource",
-                "uid": "infinity"
-              },
-              "filters": [],
-              "format": "table",
-              "global_query_id": "",
-              "parser": "backend",
-              "refId": "A",
-              "root_selector": "[$.current]",
-              "source": "url",
-              "type": "json",
-              "url": "https://api.open-meteo.com/v1/forecast?latitude=52.5862&longitude=-2.1288&current=temperature_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&hourly=temperature_2m,precipitation_probability&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset&timezone=Europe%2FLondon&forecast_days=7&forecast_hours=24&wind_speed_unit=mph",
-              "url_options": {
-                "data": "",
-                "method": "GET",
-                "params": []
-              }
+              ]
             }
           ]
         },
         {
           "id": 7,
           "type": "stat",
-          "title": "Weather Code",
+          "title": "Humidity",
           "datasource": {
             "type": "yesoreyeram-infinity-datasource",
             "uid": "infinity"
@@ -415,7 +415,9 @@ data:
             "y": 5
           },
           "fieldConfig": {
-            "defaults": {},
+            "defaults": {
+              "unit": "percent"
+            },
             "overrides": []
           },
           "options": {
@@ -434,13 +436,6 @@ data:
           },
           "targets": [
             {
-              "columns": [
-                {
-                  "selector": "weather_code",
-                  "text": "WMO Code",
-                  "type": "number"
-                }
-              ],
               "datasource": {
                 "type": "yesoreyeram-infinity-datasource",
                 "uid": "infinity"
@@ -450,22 +445,29 @@ data:
               "global_query_id": "",
               "parser": "backend",
               "refId": "A",
-              "root_selector": "[$.current]",
+              "root_selector": "$.features[0].properties",
               "source": "url",
               "type": "json",
-              "url": "https://api.open-meteo.com/v1/forecast?latitude=52.5862&longitude=-2.1288&current=temperature_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&hourly=temperature_2m,precipitation_probability&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset&timezone=Europe%2FLondon&forecast_days=7&forecast_hours=24&wind_speed_unit=mph",
+              "url": "https://data.hub.api.metoffice.gov.uk/sitespecific/v0/point/hourly?latitude=52.5862&longitude=-2.1288",
               "url_options": {
                 "data": "",
                 "method": "GET",
                 "params": []
-              }
+              },
+              "columns": [
+                {
+                  "selector": "screenRelativeHumidity",
+                  "text": "Humidity",
+                  "type": "number"
+                }
+              ]
             }
           ]
         },
         {
           "id": 8,
           "type": "timeseries",
-          "title": "Wolverhampton \u2014 Temperature (Next 24 Hours)",
+          "title": "Wolverhampton \u2014 Temperature Forecast",
           "datasource": {
             "type": "yesoreyeram-infinity-datasource",
             "uid": "infinity"
@@ -495,18 +497,6 @@ data:
           },
           "targets": [
             {
-              "columns": [
-                {
-                  "selector": "time",
-                  "text": "Time",
-                  "type": "timestamp"
-                },
-                {
-                  "selector": "temperature",
-                  "text": "Temperature",
-                  "type": "number"
-                }
-              ],
               "datasource": {
                 "type": "yesoreyeram-infinity-datasource",
                 "uid": "infinity"
@@ -516,22 +506,34 @@ data:
               "global_query_id": "",
               "parser": "backend",
               "refId": "A",
-              "root_selector": "($r := $; $map($r.hourly.time, function($v, $i) {{\"time\": $v, \"temperature\": $r.hourly.temperature_2m[$i], \"rain_probability\": $r.hourly.precipitation_probability[$i]}}))",
+              "root_selector": "$.features",
               "source": "url",
               "type": "json",
-              "url": "https://api.open-meteo.com/v1/forecast?latitude=52.5862&longitude=-2.1288&current=temperature_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&hourly=temperature_2m,precipitation_probability&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset&timezone=Europe%2FLondon&forecast_days=7&forecast_hours=24&wind_speed_unit=mph",
+              "url": "https://data.hub.api.metoffice.gov.uk/sitespecific/v0/point/hourly?latitude=52.5862&longitude=-2.1288",
               "url_options": {
                 "data": "",
                 "method": "GET",
                 "params": []
-              }
+              },
+              "columns": [
+                {
+                  "selector": "properties.time",
+                  "text": "Time",
+                  "type": "timestamp"
+                },
+                {
+                  "selector": "properties.temperature",
+                  "text": "Temperature",
+                  "type": "number"
+                }
+              ]
             }
           ]
         },
         {
           "id": 9,
           "type": "timeseries",
-          "title": "Wolverhampton \u2014 Rain Probability (Next 24 Hours)",
+          "title": "Wolverhampton \u2014 Rain Probability",
           "datasource": {
             "type": "yesoreyeram-infinity-datasource",
             "uid": "infinity"
@@ -563,18 +565,6 @@ data:
           },
           "targets": [
             {
-              "columns": [
-                {
-                  "selector": "time",
-                  "text": "Time",
-                  "type": "timestamp"
-                },
-                {
-                  "selector": "rain_probability",
-                  "text": "Rain Probability",
-                  "type": "number"
-                }
-              ],
               "datasource": {
                 "type": "yesoreyeram-infinity-datasource",
                 "uid": "infinity"
@@ -584,28 +574,40 @@ data:
               "global_query_id": "",
               "parser": "backend",
               "refId": "A",
-              "root_selector": "($r := $; $map($r.hourly.time, function($v, $i) {{\"time\": $v, \"temperature\": $r.hourly.temperature_2m[$i], \"rain_probability\": $r.hourly.precipitation_probability[$i]}}))",
+              "root_selector": "$.features",
               "source": "url",
               "type": "json",
-              "url": "https://api.open-meteo.com/v1/forecast?latitude=52.5862&longitude=-2.1288&current=temperature_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&hourly=temperature_2m,precipitation_probability&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset&timezone=Europe%2FLondon&forecast_days=7&forecast_hours=24&wind_speed_unit=mph",
+              "url": "https://data.hub.api.metoffice.gov.uk/sitespecific/v0/point/hourly?latitude=52.5862&longitude=-2.1288",
               "url_options": {
                 "data": "",
                 "method": "GET",
                 "params": []
-              }
+              },
+              "columns": [
+                {
+                  "selector": "properties.time",
+                  "text": "Time",
+                  "type": "timestamp"
+                },
+                {
+                  "selector": "properties.probOfPrecipitation",
+                  "text": "Rain Probability",
+                  "type": "number"
+                }
+              ]
             }
           ]
         },
         {
           "id": 10,
           "type": "table",
-          "title": "Wolverhampton \u2014 7 Day Forecast",
+          "title": "Wolverhampton \u2014 Hourly Forecast Detail",
           "datasource": {
             "type": "yesoreyeram-infinity-datasource",
             "uid": "infinity"
           },
           "gridPos": {
-            "h": 11,
+            "h": 12,
             "w": 24,
             "x": 0,
             "y": 19
@@ -620,43 +622,6 @@ data:
           },
           "targets": [
             {
-              "columns": [
-                {
-                  "selector": "date",
-                  "text": "Date",
-                  "type": "string"
-                },
-                {
-                  "selector": "weather_code",
-                  "text": "WMO Code",
-                  "type": "number"
-                },
-                {
-                  "selector": "high",
-                  "text": "High \u00b0C",
-                  "type": "number"
-                },
-                {
-                  "selector": "low",
-                  "text": "Low \u00b0C",
-                  "type": "number"
-                },
-                {
-                  "selector": "rain",
-                  "text": "Rain %",
-                  "type": "number"
-                },
-                {
-                  "selector": "sunrise",
-                  "text": "Sunrise",
-                  "type": "string"
-                },
-                {
-                  "selector": "sunset",
-                  "text": "Sunset",
-                  "type": "string"
-                }
-              ],
               "datasource": {
                 "type": "yesoreyeram-infinity-datasource",
                 "uid": "infinity"
@@ -666,37 +631,89 @@ data:
               "global_query_id": "",
               "parser": "backend",
               "refId": "A",
-              "root_selector": "($r := $; $map($r.daily.time, function($v, $i) {{\"date\": $v, \"high\": $r.daily.temperature_2m_max[$i], \"low\": $r.daily.temperature_2m_min[$i], \"rain\": $r.daily.precipitation_probability_max[$i], \"weather_code\": $r.daily.weather_code[$i], \"sunrise\": $r.daily.sunrise[$i], \"sunset\": $r.daily.sunset[$i]}}))",
+              "root_selector": "$.features",
               "source": "url",
               "type": "json",
-              "url": "https://api.open-meteo.com/v1/forecast?latitude=52.5862&longitude=-2.1288&current=temperature_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&hourly=temperature_2m,precipitation_probability&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset&timezone=Europe%2FLondon&forecast_days=7&forecast_hours=24&wind_speed_unit=mph",
+              "url": "https://data.hub.api.metoffice.gov.uk/sitespecific/v0/point/hourly?latitude=52.5862&longitude=-2.1288",
               "url_options": {
                 "data": "",
                 "method": "GET",
                 "params": []
-              }
+              },
+              "columns": [
+                {
+                  "selector": "properties.time",
+                  "text": "Time",
+                  "type": "timestamp"
+                },
+                {
+                  "selector": "properties.temperature",
+                  "text": "Temp \u00b0C",
+                  "type": "number"
+                },
+                {
+                  "selector": "properties.feelsLikeTemperature",
+                  "text": "Feels \u00b0C",
+                  "type": "number"
+                },
+                {
+                  "selector": "properties.probOfPrecipitation",
+                  "text": "Rain %",
+                  "type": "number"
+                },
+                {
+                  "selector": "properties.windSpeed10m",
+                  "text": "Wind",
+                  "type": "number"
+                },
+                {
+                  "selector": "properties.windDirectionFrom10m",
+                  "text": "Wind Dir",
+                  "type": "number"
+                },
+                {
+                  "selector": "properties.screenRelativeHumidity",
+                  "text": "Humidity %",
+                  "type": "number"
+                },
+                {
+                  "selector": "properties.visibility",
+                  "text": "Visibility",
+                  "type": "number"
+                },
+                {
+                  "selector": "properties.uvIndex",
+                  "text": "UV",
+                  "type": "number"
+                },
+                {
+                  "selector": "properties.significantWeatherCode",
+                  "text": "Weather Code",
+                  "type": "number"
+                }
+              ]
             }
           ]
         }
       ],
-      "refresh": "10m",
+      "refresh": "15m",
       "schemaVersion": 39,
       "tags": [
         "personal",
         "weather",
-        "open-meteo",
+        "met-office",
         "infinity"
       ],
       "templating": {
         "list": []
       },
       "time": {
-        "from": "now-24h",
-        "to": "now+24h"
+        "from": "now",
+        "to": "now+48h"
       },
       "timezone": "browser",
-      "title": "Personal | Weather | Forecast & Conditions",  
-      "uid": "personal-weather-forecast",
+      "title": "Personal | Weather | Forecast & Conditions",
+      "uid": "personal-weather-metoffice",
       "version": 1,
       "weekStart": "monday"
     }
