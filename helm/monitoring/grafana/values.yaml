@@ -11,6 +11,7 @@ kube-prometheus-stack:
         allow_loading_unsigned_plugins: yesoreyeram-infinity-datasource
     plugins:
       - yesoreyeram-infinity-datasource
+    envFromSecret: grafana-weather-api
 
     sidecar:
       dashboards:

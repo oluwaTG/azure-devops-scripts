@@ -1,10 +1,8 @@
 apiVersion: v1
 kind: ConfigMap
-
 metadata:
   name: grafana-datasource-infinity
   namespace: monitoring
-
   labels:
     grafana_datasource: "1"
 
@@ -19,3 +17,9 @@ data:
         access: proxy
         isDefault: false
         editable: false
+
+        jsonData:
+          httpHeaderName1: apikey
+
+        secureJsonData:
+          httpHeaderValue1: ${METOFFICE_API_KEY}

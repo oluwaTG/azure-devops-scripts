@@ -695,7 +695,7 @@ data:
         "to": "now+24h"
       },
       "timezone": "browser",
-      "title": "Personal | Weather | Forecast & Conditions",
+      "title": "Personal | Weather | Forecast & Conditions",  
       "uid": "personal-weather-forecast",
       "version": 1,
       "weekStart": "monday"
