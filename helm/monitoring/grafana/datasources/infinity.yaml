@@ -20,6 +20,8 @@ data:
 
         jsonData:
           httpHeaderName1: apikey
+          allowedHosts:
+            - https://data.hub.api.metoffice.gov.uk
 
         secureJsonData:
           httpHeaderValue1: ${METOFFICE_API_KEY}
