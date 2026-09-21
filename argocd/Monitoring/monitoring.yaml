@@ -1,44 +1,44 @@
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: monitoring
-  namespace: argocd
+# apiVersion: argoproj.io/v1alpha1
+# kind: Application
+# metadata:
+#   name: monitoring
+#   namespace: argocd
 
-spec:
-  project: default
+# spec:
+#   project: default
 
-  sources:
+#   sources:
 
-    # ---------------------------------------------------------
-    # kube-prometheus-stack Helm chart
-    # ---------------------------------------------------------
-    - repoURL: https://github.com/oluwaTG/azure-devops-scripts.git
-      targetRevision: main
-      path: helm/monitoring
-      helm:
-        skipCrds: true
-        valueFiles:
-          - grafana/values.yaml
+#     # ---------------------------------------------------------
+#     # kube-prometheus-stack Helm chart
+#     # ---------------------------------------------------------
+#     - repoURL: https://github.com/oluwaTG/azure-devops-scripts.git
+#       targetRevision: main
+#       path: helm/monitoring
+#       helm:
+#         skipCrds: true
+#         valueFiles:
+#           - grafana/values.yaml
 
-    # ---------------------------------------------------------
-    # Grafana GitOps resources
-    # ---------------------------------------------------------
-    - repoURL: https://github.com/oluwaTG/azure-devops-scripts.git
-      targetRevision: main
-      path: helm/monitoring/grafana
-      directory:
-        recurse: true
-        include: '{datasources/*.yaml,dashboards/*.yaml}'
+#     # ---------------------------------------------------------
+#     # Grafana GitOps resources
+#     # ---------------------------------------------------------
+#     - repoURL: https://github.com/oluwaTG/azure-devops-scripts.git
+#       targetRevision: main
+#       path: helm/monitoring/grafana
+#       directory:
+#         recurse: true
+#         include: '{datasources/*.yaml,dashboards/*.yaml}'
 
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: monitoring
+#   destination:
+#     server: https://kubernetes.default.svc
+#     namespace: monitoring
 
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
+#   syncPolicy:
+#     automated:
+#       prune: true
+#       selfHeal: true
 
-    syncOptions:
-      - CreateNamespace=true
-      - ServerSideApply=true
+#     syncOptions:
+#       - CreateNamespace=true
+#       - ServerSideApply=true
